@@ -29,6 +29,7 @@ The install creates these executable MCP servers:
 | `bioconductor-mcp` | Bioconductor package registry |
 | `anaconda-mcp` | Anaconda and Conda packages |
 | `cncb-mcp` | CNCB-NGDC resources |
+| `ena-mcp` | ENA study/sample/run search and FASTQ metadata |
 
 ## Agent configuration
 
@@ -71,6 +72,11 @@ environment to select another release. `string_interactions.limit` caps returned
 edges locally; it does not expand the input protein set.
 
 ## Development
+
+ENA tools: `ena_search`, `ena_record`, `ena_fastq`, `ena_fields`. Search uses
+ENA Portal syntax and supports bounded pagination. FASTQ results include public
+HTTPS URLs, MD5 checksums and file sizes; no downloads are started. No credentials
+are required for public records. [ENA API guide](https://ena-docs.readthedocs.io/en/latest/retrieval/programmatic-access.html).
 
 From the repository root:
 

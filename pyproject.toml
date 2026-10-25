@@ -17,6 +17,7 @@ bioconductor-mcp = "servers.bioconductor_mcp.server:main"
 anaconda-mcp = "servers.anaconda_mcp.server:main"
 cncb-mcp = "servers.cncb_mcp.server:main"
 publications-mcp = "servers.publications_mcp.server:main"
+ena-mcp = "servers.ena_mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
