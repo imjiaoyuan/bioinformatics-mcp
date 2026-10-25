@@ -30,6 +30,7 @@ The install creates these executable MCP servers:
 | `anaconda-mcp` | Anaconda and Conda packages |
 | `cncb-mcp` | CNCB-NGDC resources |
 | `ena-mcp` | ENA study/sample/run search and FASTQ metadata |
+| `uniprot-mcp` | Protein annotations, sequences and batch ID mapping |
 
 ## Agent configuration
 
@@ -72,6 +73,13 @@ environment to select another release. `string_interactions.limit` caps returned
 edges locally; it does not expand the input protein set.
 
 ## Development
+
+UniProt tools: `uniprot_search`, `uniprot_entry`, `uniprot_sequence`,
+`uniprot_mapping_submit`, `uniprot_mapping_status`, `uniprot_mapping_results`.
+Mapping is asynchronous: submit IDs, check the returned job ID, then fetch a
+bounded result page. Failed mappings and pagination links are preserved. Database
+codes follow the [official ID mapping configuration](https://rest.uniprot.org/configure/idmapping/fields).
+Public queries require no credentials. [UniProt API](https://www.uniprot.org/help/api).
 
 ENA tools: `ena_search`, `ena_record`, `ena_fastq`, `ena_fields`. Search uses
 ENA Portal syntax and supports bounded pagination. FASTQ results include public
