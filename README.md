@@ -31,6 +31,7 @@ The install creates these executable MCP servers:
 | `cncb-mcp` | CNCB-NGDC resources |
 | `ena-mcp` | ENA study/sample/run search and FASTQ metadata |
 | `uniprot-mcp` | Protein annotations, sequences and batch ID mapping |
+| `gprofiler-mcp` | GO/pathway enrichment, gene ID conversion and orthologs |
 
 ## Agent configuration
 
@@ -73,6 +74,13 @@ environment to select another release. `string_interactions.limit` caps returned
 edges locally; it does not expand the input protein set.
 
 ## Development
+
+g:Profiler tools: `gprofiler_enrichment`, `gprofiler_convert`, `gprofiler_orthologs`.
+The enrichment tool defaults to GO BP/MF/CC, supports a custom background of
+detected genes and reports correction/version metadata and truncation explicitly.
+Organism codes and data-source availability follow [g:Profiler](https://biit.cs.ut.ee/gprofiler/page/apis).
+Conversion targets are `ENTREZGENE_ACC` (default), `ENSG` and `UNIPROTSWISSPROT`.
+Public calls require no credentials; selecting KEGG does not grant rights to its data.
 
 UniProt tools: `uniprot_search`, `uniprot_entry`, `uniprot_sequence`,
 `uniprot_mapping_submit`, `uniprot_mapping_status`, `uniprot_mapping_results`.
