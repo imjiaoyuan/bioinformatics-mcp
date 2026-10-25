@@ -1,5 +1,6 @@
 from __future__ import annotations
 import os
+import re
 import httpx
 from mcp.server.fastmcp import FastMCP
 
@@ -22,7 +23,10 @@ async def bioconductor_search(query: str, version: str = DEFAULT_VERSION, limit:
     result: list[dict] = []
     for repo in ("bioc", "data/annotation", "data/experiment"):
         try: data = await _json(f"{_base(version)}/{repo}/packages.json")
-        except httpx.HTTPStatusError: continue
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                continue
+            raise
         if isinstance(data, dict): data = list(data.values())
         for item in data if isinstance(data, list) else []:
             text = " ".join(str(item.get(k, "")) for k in ("Package", "Title", "Description", "biocViews")).lower()
@@ -34,14 +38,20 @@ async def bioconductor_search(query: str, version: str = DEFAULT_VERSION, limit:
 @mcp.tool()
 async def bioconductor_package(package: str, version: str = DEFAULT_VERSION) -> dict:
     """Get metadata for a named Bioconductor package across standard repositories."""
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9.]*", package):
+        raise ValueError("package must be an R package name")
     for repo in ("bioc", "data/annotation", "data/experiment"):
-        try: data = await _json(f"{_base(version)}/{repo}/packages/{package}.json")
-        except httpx.HTTPStatusError: continue
-        if isinstance(data, dict):
-            data["repository"] = repo
-            data["release"] = version
-            data["web_url"] = f"https://bioconductor.org/packages/{version}/{repo}/html/{package}.html"
-            return data
+        try:
+            data = await _json(f"{_base(version)}/{repo}/packages.json")
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                continue
+            raise
+        items = list(data.values()) if isinstance(data, dict) else data
+        for item in items if isinstance(items, list) else []:
+            if isinstance(item, dict) and item.get("Package") == package:
+                return {**item, "repository": repo, "release": version,
+                        "web_url": f"https://bioconductor.org/packages/{version}/{repo}/html/{package}.html"}
     raise ValueError(f"Package {package!r} was not found in Bioconductor {version}")
 
 @mcp.tool()

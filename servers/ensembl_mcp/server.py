@@ -8,7 +8,9 @@ BASE = "https://rest.ensembl.org"
 async def _get(path: str, params: dict | None = None) -> dict | list:
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     async with httpx.AsyncClient(timeout=60, headers=headers) as client:
-        r = await client.get(BASE + path, params=params); r.raise_for_status(); return r.json()
+        r = await client.get(BASE + path, params={**(params or {}), "content-type": "application/json"})
+        r.raise_for_status()
+        return r.json()
 
 @mcp.tool()
 async def ensembl_lookup(identifier: str, expand: bool = False) -> dict:

@@ -47,12 +47,31 @@ Each command is an MCP stdio server. An agent should configure the selected comm
 
 Use the equivalent MCP configuration file or CLI command for Codex, Claude Code, Pi, OpenCode, or DeepSeek Harness. `NCBI_EMAIL` is required for NCBI; `NCBI_API_KEY` is optional and only needed for higher request rates.
 
+For Codex, forward existing environment variables using `env_vars`; values such as
+`"${NCBI_EMAIL}"` in an `env` table are literal strings:
+
+```toml
+[mcp_servers.ncbi]
+command = "<REPOSITORY_ROOT>/.venv/bin/ncbi-mcp"
+cwd = "<REPOSITORY_ROOT>"
+env_vars = ["NCBI_EMAIL", "NCBI_API_KEY", "NCBI_TOOL"]
+```
+
+Export these variables before starting the agent. Do not store credentials in the
+repository. Bioconductor defaults to release 3.21; set `BIOC_VERSION` in the server
+environment to select another release. `string_interactions.limit` caps returned
+edges locally; it does not expand the input protein set.
+
 ## Development
 
 From the repository root:
 
 ```bash
 python -m compileall -q servers
+python -m unittest discover -s tests -v
+python -m pip check
 ```
+
+Regression tests use mocked HTTP responses and need no network or API keys.
 
 Provider implementations are under `servers/`. Keep credentials in environment variables and follow each provider's rate limits, licensing, and copyright terms.

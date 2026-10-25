@@ -14,21 +14,22 @@ async def _get(endpoint: str, params: dict) -> list[dict]:
 async def string_resolve(proteins: list[str], species: int = 9606) -> list[dict]:
     """Resolve gene/protein names to STRING identifiers."""
     if not proteins or len(proteins) > 100: raise ValueError("proteins must contain 1-100 names")
-    return await _get("get_string_ids", {"identifiers": "%0d".join(proteins), "species": species})
+    return await _get("get_string_ids", {"identifiers": "\r".join(proteins), "species": species})
 
 @mcp.tool()
 async def string_interactions(proteins: list[str], species: int = 9606, required_score: int = 400, limit: int = 100) -> list[dict]:
-    """Get protein-protein interaction edges from STRING."""
+    """Get protein-protein interaction edges from STRING, returning at most limit edges."""
     if not proteins or len(proteins) > 100: raise ValueError("proteins must contain 1-100 names")
     required_score = max(0, min(required_score, 1000)); limit = max(1, min(limit, 1000))
-    return await _get("network", {"identifiers": "%0d".join(proteins), "species": species,
-                                  "required_score": required_score, "limit": limit})
+    data = await _get("network", {"identifiers": "\r".join(proteins), "species": species,
+                                  "required_score": required_score})
+    return data[:limit]
 
 @mcp.tool()
 async def string_enrichment(proteins: list[str], species: int = 9606) -> list[dict]:
     """Run GO/ pathway functional enrichment for a protein list."""
     if not proteins or len(proteins) > 2000: raise ValueError("proteins must contain 1-2000 names")
-    return await _get("enrichment", {"identifiers": "%0d".join(proteins), "species": species})
+    return await _get("enrichment", {"identifiers": "\r".join(proteins), "species": species})
 
 def main() -> None: mcp.run()
 if __name__ == "__main__": main()

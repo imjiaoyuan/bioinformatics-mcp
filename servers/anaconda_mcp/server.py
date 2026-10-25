@@ -9,7 +9,7 @@ async def _get(path: str, params: dict | None = None):
 @mcp.tool()
 async def anaconda_search(query: str, limit: int = 20) -> list[dict]:
     """Search public Anaconda packages and channels."""
-    data = await _get("/search", {"query": query})
+    data = await _get("/search", {"name": query})
     return data[:max(1, min(limit, 100))] if isinstance(data, list) else data
 @mcp.tool()
 async def anaconda_package(owner: str, package: str) -> dict:
