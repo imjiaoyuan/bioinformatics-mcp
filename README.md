@@ -132,6 +132,10 @@ result. Public calls need no credentials. [InterPro API guide](https://interpro-
 
 ## Development
 
+Cancer-data API research and proposed next integrations are documented in
+[Cancer data API options](docs/cancer-apis.md). GDC/TCGA and cBioPortal public
+queries have been checked; these providers are not implemented yet.
+
 From the repository root:
 
 ```bash
