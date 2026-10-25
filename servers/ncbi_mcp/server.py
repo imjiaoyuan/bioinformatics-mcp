@@ -4,9 +4,14 @@ from __future__ import annotations
 import json
 import os
 import time
+import re
+from html.parser import HTMLParser
 from collections import OrderedDict
 from typing import Any
 from urllib.parse import urlencode
+from urllib.parse import urljoin
+
+from common.http import bounded, identifier, request, text
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -15,6 +20,7 @@ BASE_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 ALLOWED_DATABASES = {
     "pubmed", "pmc", "gene", "protein", "nuccore", "nucleotide", "sra",
     "assembly", "bioproject", "biosample", "clinvar", "omim", "taxonomy",
+    "gds", "geoprofiles",
 }
 _cache: OrderedDict[str, tuple[float, Any]] = OrderedDict()
 _last_request = 0.0
@@ -172,6 +178,77 @@ async def pubmed_citations(pmids: list[str], include_abstracts: bool = False) ->
     if include_abstracts:
         response["abstract_xml"] = (await ncbi_fetch("pubmed", pmids, "xml"))["content"]
     return response
+
+
+@mcp.tool()
+async def geo_search(query: str, limit: int = 20) -> dict[str, Any]:
+    """Search GEO studies/samples with Entrez syntax and return summary metadata."""
+    query = text(query)
+    bounded(limit)
+    result = await ncbi_search("gds", query, limit)
+    result["source_url"] = "https://www.ncbi.nlm.nih.gov/gds/?" + urlencode({"term": query})
+    result["summaries"] = (await ncbi_summary("gds", result["ids"]))["result"] if result["ids"] else {}
+    return result
+
+
+def _geo_accession(accession: str) -> str:
+    return identifier(accession.upper(), r"(?:GSE|GSM)[1-9][0-9]*", "GEO accession")
+
+
+@mcp.tool()
+async def geo_record(accession: str) -> dict[str, Any]:
+    """Read GSE/GSM SOFT metadata, including sample characteristics and supplement links."""
+    accession = _geo_accession(accession)
+    response = await request("GET", "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi",
+                             params={"acc": accession, "targ": "self", "form": "text", "view": "full"})
+    metadata: dict[str, list[str]] = {}
+    for line in response.text.splitlines():
+        if line.startswith("!") and " = " in line:
+            key, value = line[1:].split(" = ", 1)
+            metadata.setdefault(key, []).append(value)
+    if not metadata:
+        raise ValueError(f"No GEO SOFT metadata returned for {accession}")
+    return {"accession": accession, "metadata": metadata,
+            "source_url": f"https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={accession}"}
+
+
+class _DirectoryLinks(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.links: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "a":
+            self.links.extend(v for k, v in attrs if k == "href" and v)
+
+
+@mcp.tool()
+async def geo_files(accession: str, limit: int = 30) -> dict[str, Any]:
+    """List actual GEO series matrices/supplements or sample supplements; do not download them."""
+    accession = _geo_accession(accession)
+    bounded(limit)
+    kind = "series" if accession.startswith("GSE") else "samples"
+    group = re.sub(r"[0-9]{1,3}$", "nnn", accession)
+    base = f"https://ftp.ncbi.nlm.nih.gov/geo/{kind}/{group}/{accession}/"
+    directories = [base + "suppl/"]
+    if kind == "series":
+        directories.insert(0, base + "matrix/")
+    files: list[str] = []
+    for directory in directories:
+        try:
+            response = await request("GET", directory)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                continue
+            raise
+        parser = _DirectoryLinks()
+        parser.feed(response.text)
+        for href in parser.links:
+            url = urljoin(directory, href)
+            if url.startswith(directory) and not url.endswith("/") and "?" not in url and url not in files:
+                files.append(url)
+    return {"accession": accession, "files": files[:limit], "returned": min(len(files), limit),
+            "truncated": len(files) > limit, "source_url": base}
 
 
 @mcp.resource("ncbi://databases")

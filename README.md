@@ -21,7 +21,7 @@ The install creates these executable MCP servers:
 
 | Command | Provider |
 | --- | --- |
-| `ncbi-mcp` | NCBI and PubMed |
+| `ncbi-mcp` | NCBI, PubMed, and GEO |
 | `publications-mcp` | Cell, Nature, PNAS, and Science metadata |
 | `pdb-mcp` | RCSB Protein Data Bank |
 | `string-mcp` | STRING interactions and enrichment |
@@ -31,6 +31,14 @@ The install creates these executable MCP servers:
 | `cncb-mcp` | CNCB-NGDC resources |
 
 ## Agent configuration
+
+### GEO (included in ncbi-mcp)
+
+`geo_search` searches GEO summaries, `geo_record` reads GSE/GSM SOFT metadata
+(including sample characteristics), and `geo_files` lists actual matrix and
+supplement URLs. File contents are not downloaded. Entrez `gds` and `geoprofiles`
+are also available through the generic NCBI tools. Entrez calls require
+`NCBI_EMAIL`; `NCBI_API_KEY` remains optional. [Official GEO access guide](https://www.ncbi.nlm.nih.gov/geo/info/geo_paccess.html).
 
 Each command is an MCP stdio server. An agent should configure the selected command with the repository root as its working directory. For example:
 
