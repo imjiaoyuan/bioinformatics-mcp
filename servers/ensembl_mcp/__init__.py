@@ -1,0 +1,1 @@
+"""Ensembl REST MCP server."""

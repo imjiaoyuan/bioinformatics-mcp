@@ -1,0 +1,1 @@
+"""CNCB-NGDC MCP server."""
