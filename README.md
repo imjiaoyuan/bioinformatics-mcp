@@ -32,6 +32,7 @@ The install creates these executable MCP servers:
 | `ena-mcp` | ENA study/sample/run search and FASTQ metadata |
 | `uniprot-mcp` | Protein annotations, sequences and batch ID mapping |
 | `gprofiler-mcp` | GO/pathway enrichment, gene ID conversion and orthologs |
+| `biostudies-mcp` | BioStudies/ArrayExpress studies, files and SDRF metadata |
 
 ## Agent configuration
 
@@ -74,6 +75,13 @@ environment to select another release. `string_interactions.limit` caps returned
 edges locally; it does not expand the input protein set.
 
 ## Development
+
+BioStudies tools: `biostudies_search`, `biostudies_record`, `biostudies_files`,
+`biostudies_samples`. Searches default to ArrayExpress; use `collection="all"`
+for all BioStudies. Study trees preserve ENA links. Files support offset pagination;
+SDRF results contain columns and assay rows, preserving duplicate column names.
+Assay rows are not deduplicated into biological samples. No credentials are needed
+for public data. [ArrayExpress in BioStudies](https://www.ebi.ac.uk/biostudies/arrayexpress).
 
 g:Profiler tools: `gprofiler_enrichment`, `gprofiler_convert`, `gprofiler_orthologs`.
 The enrichment tool defaults to GO BP/MF/CC, supports a custom background of

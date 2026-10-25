@@ -20,6 +20,7 @@ publications-mcp = "servers.publications_mcp.server:main"
 ena-mcp = "servers.ena_mcp.server:main"
 uniprot-mcp = "servers.uniprot_mcp.server:main"
 gprofiler-mcp = "servers.gprofiler_mcp.server:main"
+biostudies-mcp = "servers.biostudies_mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
