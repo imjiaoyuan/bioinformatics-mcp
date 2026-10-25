@@ -41,8 +41,9 @@ def identifiers(values: list[str], maximum: int = 1000) -> list[str]:
 
 async def request(method: str, url: str, *, params: dict | None = None,
                   json: Any = None, data: dict | None = None,
-                  max_bytes: int = 8_000_000, interval: float = 0.35) -> httpx.Response:
-    """Serialize requests per host; bound response bytes and retry GET throttling once."""
+                  max_bytes: int = 8_000_000, interval: float = 0.35,
+                  retryable: bool = False) -> httpx.Response:
+    """Bound responses and retry transient GET failures or explicitly idempotent requests once."""
     host = urlsplit(url).netloc
     lock = _locks.setdefault(host, asyncio.Lock())
     async with lock:
@@ -52,7 +53,7 @@ async def request(method: str, url: str, *, params: dict | None = None,
                 async with httpx.AsyncClient(timeout=45, follow_redirects=True,
                                              headers={"User-Agent": "bioinformatics-mcp/0.1"}) as client:
                     async with client.stream(method, url, params=params, json=json, data=data) as response:
-                        if method == "GET" and response.status_code in {429, 503} and attempt == 0:
+                        if (method == "GET" or retryable) and response.status_code in {429, 500, 502, 503, 504} and attempt == 0:
                             try:
                                 delay = min(5.0, max(1.0, float(response.headers.get("Retry-After", "1"))))
                             except ValueError:

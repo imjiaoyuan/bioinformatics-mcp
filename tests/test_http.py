@@ -22,6 +22,15 @@ class TransportTests(HTTPTestCase):
             with self.assertRaises(httpx.HTTPStatusError):
                 await request("POST", "https://example.org", json={})
 
+    async def test_idempotent_post_can_retry_service_failure(self):
+        calls = []
+        def handler(req):
+            calls.append(req)
+            return httpx.Response(503) if len(calls) == 1 else httpx.Response(200, json={})
+        with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
+            await request("POST", "https://example.org", json={}, retryable=True)
+        self.assertEqual(len(calls), 2)
+
     async def test_response_size_bounded(self):
         with self.mock_http(lambda req: httpx.Response(200, content=b"x" * 10)):
             with self.assertRaisesRegex(ValueError, "too large"):

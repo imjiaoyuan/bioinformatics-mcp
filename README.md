@@ -25,7 +25,7 @@ The install creates these executable MCP servers:
 | `publications-mcp` | Cell, Nature, PNAS, and Science metadata |
 | `pdb-mcp` | RCSB Protein Data Bank |
 | `string-mcp` | STRING interactions and enrichment |
-| `ensembl-mcp` | Ensembl identifiers and genomic features |
+| `ensembl-mcp` | Ensembl/Ensembl Plants annotations, sequences and homology |
 | `bioconductor-mcp` | Bioconductor package registry |
 | `anaconda-mcp` | Anaconda and Conda packages |
 | `cncb-mcp` | CNCB-NGDC resources |
@@ -75,6 +75,14 @@ environment to select another release. `string_interactions.limit` caps returned
 edges locally; it does not expand the input protein set.
 
 ## Development
+
+Ensembl Plants uses the existing `ensembl-mcp` server. Added `ensembl_species`
+(species/assembly discovery), `ensembl_lookup_batch` (100 IDs), `ensembl_sequence`
+and `ensembl_homologs`. Rice defaults to `oryza_sativa`; compare the returned
+assembly/release to your reference before using IDs. No implicit conversion
+between RAP-DB, MSU or other annotation versions is performed. Homology defaults
+to `compara="plants"`, and protein sequences should use transcript/translation IDs.
+Public calls need no credentials. [Ensembl Plants REST guide](https://jun2026-plants.ensembl.org/info/data/rest.html).
 
 BioStudies tools: `biostudies_search`, `biostudies_record`, `biostudies_files`,
 `biostudies_samples`. Searches default to ArrayExpress; use `collection="all"`
