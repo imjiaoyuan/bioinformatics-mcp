@@ -33,16 +33,9 @@ The install creates these executable MCP servers:
 | `uniprot-mcp` | Protein annotations, sequences and batch ID mapping |
 | `gprofiler-mcp` | GO/pathway enrichment, gene ID conversion and orthologs |
 | `biostudies-mcp` | BioStudies/ArrayExpress studies, files and SDRF metadata |
+| `interpro-mcp` | InterPro/Pfam families, domains, GO annotations and protein matches |
 
 ## Agent configuration
-
-### GEO (included in ncbi-mcp)
-
-`geo_search` searches GEO summaries, `geo_record` reads GSE/GSM SOFT metadata
-(including sample characteristics), and `geo_files` lists actual matrix and
-supplement URLs. File contents are not downloaded. Entrez `gds` and `geoprofiles`
-are also available through the generic NCBI tools. Entrez calls require
-`NCBI_EMAIL`; `NCBI_API_KEY` remains optional. [Official GEO access guide](https://www.ncbi.nlm.nih.gov/geo/info/geo_paccess.html).
 
 Each command is an MCP stdio server. An agent should configure the selected command with the repository root as its working directory. For example:
 
@@ -74,7 +67,51 @@ repository. Bioconductor defaults to release 3.21; set `BIOC_VERSION` in the ser
 environment to select another release. `string_interactions.limit` caps returned
 edges locally; it does not expand the input protein set.
 
-## Development
+## Additional provider tools
+
+### GEO (included in ncbi-mcp)
+
+`geo_search` searches GEO summaries, `geo_record` reads GSE/GSM SOFT metadata
+(including sample characteristics), and `geo_files` lists actual matrix and
+supplement URLs. File contents are not downloaded. Entrez `gds` and `geoprofiles`
+are also available through the generic NCBI tools. Entrez calls require
+`NCBI_EMAIL`; `NCBI_API_KEY` remains optional. [Official GEO access guide](https://www.ncbi.nlm.nih.gov/geo/info/geo_paccess.html).
+
+### ENA
+
+ENA tools: `ena_search`, `ena_record`, `ena_fastq`, `ena_fields`. Search uses
+ENA Portal syntax and supports bounded pagination. FASTQ results include public
+HTTPS URLs, MD5 checksums and file sizes; no downloads are started. No credentials
+are required for public records. [ENA API guide](https://ena-docs.readthedocs.io/en/latest/retrieval/programmatic-access.html).
+
+### UniProt
+
+UniProt tools: `uniprot_search`, `uniprot_entry`, `uniprot_sequence`,
+`uniprot_mapping_submit`, `uniprot_mapping_status`, `uniprot_mapping_results`.
+Mapping is asynchronous: submit IDs, check the returned job ID, then fetch a
+bounded result page. Failed mappings and pagination links are preserved. Database
+codes follow the [official ID mapping configuration](https://rest.uniprot.org/configure/idmapping/fields).
+Public queries require no credentials. [UniProt API](https://www.uniprot.org/help/api).
+
+### g:Profiler
+
+g:Profiler tools: `gprofiler_enrichment`, `gprofiler_convert`, `gprofiler_orthologs`.
+The enrichment tool defaults to GO BP/MF/CC, supports a custom background of
+detected genes and reports correction/version metadata and truncation explicitly.
+Organism codes and data-source availability follow [g:Profiler](https://biit.cs.ut.ee/gprofiler/page/apis).
+Conversion targets are `ENTREZGENE_ACC` (default), `ENSG` and `UNIPROTSWISSPROT`.
+Public calls require no credentials; selecting KEGG does not grant rights to its data.
+
+### BioStudies / ArrayExpress
+
+BioStudies tools: `biostudies_search`, `biostudies_record`, `biostudies_files`,
+`biostudies_samples`. Searches default to ArrayExpress; use `collection="all"`
+for all BioStudies. Study trees preserve ENA links. Files support offset pagination;
+SDRF results contain columns and assay rows, preserving duplicate column names.
+Assay rows are not deduplicated into biological samples. No credentials are needed
+for public data. [ArrayExpress in BioStudies](https://www.ebi.ac.uk/biostudies/arrayexpress).
+
+### Ensembl Plants
 
 Ensembl Plants uses the existing `ensembl-mcp` server. Added `ensembl_species`
 (species/assembly discovery), `ensembl_lookup_batch` (100 IDs), `ensembl_sequence`
@@ -84,31 +121,16 @@ between RAP-DB, MSU or other annotation versions is performed. Homology defaults
 to `compara="plants"`, and protein sequences should use transcript/translation IDs.
 Public calls need no credentials. [Ensembl Plants REST guide](https://jun2026-plants.ensembl.org/info/data/rest.html).
 
-BioStudies tools: `biostudies_search`, `biostudies_record`, `biostudies_files`,
-`biostudies_samples`. Searches default to ArrayExpress; use `collection="all"`
-for all BioStudies. Study trees preserve ENA links. Files support offset pagination;
-SDRF results contain columns and assay rows, preserving duplicate column names.
-Assay rows are not deduplicated into biological samples. No credentials are needed
-for public data. [ArrayExpress in BioStudies](https://www.ebi.ac.uk/biostudies/arrayexpress).
+### InterPro
 
-g:Profiler tools: `gprofiler_enrichment`, `gprofiler_convert`, `gprofiler_orthologs`.
-The enrichment tool defaults to GO BP/MF/CC, supports a custom background of
-detected genes and reports correction/version metadata and truncation explicitly.
-Organism codes and data-source availability follow [g:Profiler](https://biit.cs.ut.ee/gprofiler/page/apis).
-Conversion targets are `ENTREZGENE_ACC` (default), `ENSG` and `UNIPROTSWISSPROT`.
-Public calls require no credentials; selecting KEGG does not grant rights to its data.
+InterPro tools: `interpro_search`, `interpro_entry`,
+`interpro_protein_annotations`, `interpro_proteins`. These retrieve existing
+annotations rather than running InterProScan on novel sequences. IPR/PF records,
+protein match locations and taxon-filtered protein lists preserve source IDs and
+pagination. HTTP 408 is reported as pending computation, distinct from an empty
+result. Public calls need no credentials. [InterPro API guide](https://interpro-documentation.readthedocs.io/en/latest/api.html).
 
-UniProt tools: `uniprot_search`, `uniprot_entry`, `uniprot_sequence`,
-`uniprot_mapping_submit`, `uniprot_mapping_status`, `uniprot_mapping_results`.
-Mapping is asynchronous: submit IDs, check the returned job ID, then fetch a
-bounded result page. Failed mappings and pagination links are preserved. Database
-codes follow the [official ID mapping configuration](https://rest.uniprot.org/configure/idmapping/fields).
-Public queries require no credentials. [UniProt API](https://www.uniprot.org/help/api).
-
-ENA tools: `ena_search`, `ena_record`, `ena_fastq`, `ena_fields`. Search uses
-ENA Portal syntax and supports bounded pagination. FASTQ results include public
-HTTPS URLs, MD5 checksums and file sizes; no downloads are started. No credentials
-are required for public records. [ENA API guide](https://ena-docs.readthedocs.io/en/latest/retrieval/programmatic-access.html).
+## Development
 
 From the repository root:
 

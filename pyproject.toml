@@ -1,7 +1,7 @@
 [project]
 name = "bioinformatics-mcp"
 version = "0.1.0"
-description = "A practical Model Context Protocol server for NCBI Entrez E-utilities"
+description = "Independent MCP servers for bioinformatics data services"
 requires-python = ">=3.10"
 dependencies = [
   "mcp>=1.30.0,<2",
@@ -21,6 +21,7 @@ ena-mcp = "servers.ena_mcp.server:main"
 uniprot-mcp = "servers.uniprot_mcp.server:main"
 gprofiler-mcp = "servers.gprofiler_mcp.server:main"
 biostudies-mcp = "servers.biostudies_mcp.server:main"
+interpro-mcp = "servers.interpro_mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
