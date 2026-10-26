@@ -31,6 +31,7 @@ cellxgene-mcp = "servers.cellxgene_mcp.server:main"
 chembl-mcp = "servers.chembl_mcp.server:main"
 gwas-mcp = "servers.gwas_mcp.server:main"
 opentargets-mcp = "servers.opentargets_mcp.server:main"
+cbioportal-mcp = "servers.cbioportal_mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
