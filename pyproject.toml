@@ -22,6 +22,7 @@ uniprot-mcp = "servers.uniprot_mcp.server:main"
 gprofiler-mcp = "servers.gprofiler_mcp.server:main"
 biostudies-mcp = "servers.biostudies_mcp.server:main"
 interpro-mcp = "servers.interpro_mcp.server:main"
+gdc-mcp = "servers.gdc_mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
