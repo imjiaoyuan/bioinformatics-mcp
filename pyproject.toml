@@ -29,6 +29,7 @@ gdc-mcp = "servers.gdc_mcp.server:main"
 reactome-mcp = "servers.reactome_mcp.server:main"
 cellxgene-mcp = "servers.cellxgene_mcp.server:main"
 chembl-mcp = "servers.chembl_mcp.server:main"
+gwas-mcp = "servers.gwas_mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
