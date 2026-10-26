@@ -1,7 +1,9 @@
 # Cancer data API options
 
-Reviewed on 2026-10-25. These are integration proposals, not implemented MCP servers.
-Only GDC and the public cBioPortal REST endpoint were exercised against live data.
+Initially reviewed on 2026-10-25; implementation status updated on 2026-10-26.
+GDC and public cBioPortal REST queries are now implemented as `gdc-mcp` and
+`cbioportal-mcp`. Xena, PDC and ARGO below remain proposals.
+See [validation notes](new-provider-validation.md) for the new servers' checks.
 
 ## Recommended order
 
@@ -13,15 +15,14 @@ Only GDC and the public cBioPortal REST endpoint were exercised against live dat
 | 4 | CPTAC through PDC | GraphQL at `https://pdc.cancer.gov/graphql`; proteomic study catalog, study versions and associated metadata/files | GraphQL documented as open access; follow applicable file/data-use terms | Documentation reviewed; live endpoint/schema not tested |
 | 5 | ICGC ARGO | Current ARGO platform and documented access workflow | Controlled data requires approved access | Documentation reviewed; verify current schemas before implementing; do not assume legacy ICGC DCC APIs still work |
 
-## TCGA/GDC first implementation
+## TCGA/GDC implementation
 
-TCGA is a program hosted by GDC rather than a separate API host. Reuse the shared
-bounded HTTP helpers, but create a `gdc-mcp` provider instead of routing these calls
-through NCBI Entrez.
+TCGA is a program hosted by GDC rather than a separate API host. The `gdc-mcp`
+provider uses the shared bounded HTTP helpers and queries GDC directly.
 
-Suggested tools:
+Implemented tools:
 
-- `gdc_projects`: filter by program, project ID and primary site; return project metadata.
+- `gdc_projects`: filter by program and primary site; return project metadata and IDs.
 - `gdc_cases`: filter cohorts and retrieve selected clinical/sample attributes with bounded pagination.
 - `gdc_files`: filter by project, data category/type, workflow and access level; return UUIDs, names, sizes and checksums.
 - `gdc_file`: retrieve metadata for one UUID and preserve case/sample/aliquot relationships.
