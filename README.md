@@ -272,15 +272,45 @@ query servers are implemented; Xena, PDC and ARGO remain proposals.
 From the repository root:
 
 ```bash
-python -m compileall -q servers common
+python -m pip install -e '.[dev]'
+python -m compileall -q servers common tests scripts
 python -m unittest discover -s tests -v
-pytest -q
+python -m pytest -q
 python -m pip check
 ```
 
 Regression tests use mocked HTTP/SDK responses and need no network or API keys.
-Transport tests initialize each new server over stdio, discover tools and check
-validation error responses. A local SOMA dataframe test runs when the optional
-CELLxGENE dependency is installed and skips otherwise.
+Transport tests start all 20 installed console scripts from temporary working
+directories, initialize stdio connections, discover tools and check validation
+responses without contacting providers. Local-only PDB/CNCB tools also exercise
+successful responses. The registered command list and tool counts are asserted
+in `tests/test_mcp_transport.py`; update it when adding a server or tool.
+A local SOMA dataframe test runs when the optional CELLxGENE dependency is
+installed and skips otherwise. To run that test, install `'.[dev,cellxgene]'`
+in a Python 3.12 environment.
+
+### Continuous integration
+
+[CI](.github/workflows/ci.yml) runs on pushes, pull requests and manual dispatch:
+
+- Base installation, dependency consistency, compilation, regression and stdio
+  tests on Python 3.10, 3.11, 3.12, 3.13 and 3.14.
+- A separate Python 3.12 job installs the CELLxGENE extra from a native
+  TileDB-SOMA wheel, verifies imports and runs the full suite including local SOMA.
+- A Python 3.12 packaging job builds an sdist and a wheel from that sdist, checks
+  metadata with Twine, then installs each artifact into its own clean venv and
+  exercises all 20 installed MCP commands outside the source checkout.
+
+Run the packaging checks locally with:
+
+```bash
+python -m build
+python -m twine check --strict dist/*
+python scripts/check_distribution.py dist
+```
+
+Use a distribution directory containing exactly one wheel and one source archive.
+Dependency installation requires network access; the tests do not call live
+bioinformatics APIs and need no credentials. CI uses standard Python, venv and pip.
 
 Provider implementations are under `servers/`. Keep credentials in environment variables and follow each provider's rate limits, licensing, and copyright terms.

@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.10', '3.11', '3.12', '3.13', '3.14']
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install base package and development tools
+        run: python -m pip install -e '.[dev]'
+      - name: Check dependency consistency
+        run: python -m pip check
+      - name: Compile Python sources
+        run: python -m compileall -q servers common tests scripts
+      - name: Run offline regression and all 20 stdio checks
+        run: python -m pytest -q
+
+  cellxgene:
+    name: CELLxGENE (Python 3.12)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install optional SDK with a native wheel
+        run: python -m pip install --only-binary=tiledbsoma -e '.[dev,cellxgene]'
+      - name: Verify the optional dependency is importable
+        run: python -c 'import cellxgene_census, tiledbsoma; print(cellxgene_census.__version__, tiledbsoma.__version__)'
+      - name: Check dependency consistency
+        run: python -m pip check
+      - name: Run full suite including the real local SOMA test
+        run: python -m pytest -q
+
+  distributions:
+    name: Build and install distributions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install development tools
+        run: python -m pip install -e '.[dev]'
+      - name: Build sdist and wheel from sdist
+        run: python -m build
+      - name: Validate package metadata
+        run: python -m twine check --strict dist/*
+      - name: Install each artifact in a clean environment and check all 20 commands
+        run: python scripts/check_distribution.py dist

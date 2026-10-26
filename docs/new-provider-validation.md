@@ -34,24 +34,28 @@ response handling, provider errors, pagination, GraphQL partial/error results,
 sample/gene selection bounds, measurement semantics and version metadata.
 Tests use mocked HTTP/SDK responses and do not require network access or API keys.
 A tiny local SOMA dataframe test exercises the actual SDK iterator and filtering;
-it skips when the optional dependency is absent. Stdio tests initialize each of
-the seven servers, discover its expected tools and invoke validation failures
-through the MCP transport.
+it skips when the optional dependency is absent. Stdio tests now start all 20
+installed console scripts outside the source checkout, discover their expected
+tools and invoke validation failures through the MCP transport. PDB/CNCB also
+exercise successful local-only tool calls.
 
 Validation commands:
 
 ```bash
-python -m compileall -q servers common tests
+python -m pip install -e '.[dev]'
+python -m compileall -q servers common tests scripts
 python -m unittest discover -s tests -v
 python -m pytest -q
 python -m pip check
 ```
 
-Python 3.12 passed all 81 tests, including the local SOMA test. The base Python
-3.14 environment passed the suite with the optional SOMA test skipped. Dependency
+Python 3.12 passed all 101 tests, including the local SOMA test. The base Python
+3.14 environment passed 100 tests with the optional SOMA test skipped. Dependency
 checks passed in both environments. All 20 console scripts were registered and
 present after editable installation. In this execution environment, thread-pool
 shutdown hung inside the restricted sandbox; tests completed normally outside it.
+The CI workflow and clean wheel/sdist installation checks are documented in the
+[README](../README.md#continuous-integration).
 
 ## Public API smoke checks
 
