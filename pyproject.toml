@@ -8,6 +8,9 @@ dependencies = [
   "httpx>=0.27.0",
 ]
 
+[project.optional-dependencies]
+cellxgene = ["cellxgene-census>=1.18.0,<2", "tiledbsoma>=1.15.3,<2"]
+
 [project.scripts]
 ncbi-mcp = "servers.ncbi_mcp.server:main"
 pdb-mcp = "servers.pdb_mcp.server:main"
@@ -24,6 +27,7 @@ biostudies-mcp = "servers.biostudies_mcp.server:main"
 interpro-mcp = "servers.interpro_mcp.server:main"
 gdc-mcp = "servers.gdc_mcp.server:main"
 reactome-mcp = "servers.reactome_mcp.server:main"
+cellxgene-mcp = "servers.cellxgene_mcp.server:main"
 
 [build-system]
 requires = ["hatchling"]
