@@ -46,8 +46,10 @@ class ServerTransportTests(unittest.IsolatedAsyncioTestCase):
         entries = {entry.name: entry.value for entry in
                    distribution("bioinformatics-mcp").entry_points
                    if entry.group == "console_scripts"}
-        self.assertEqual(entries, {f"{provider}-mcp": f"servers.{provider}_mcp.server:main"
-                                   for provider in SERVERS})
+        expected = {f"{provider}-mcp": f"servers.{provider}_mcp.server:main"
+                    for provider in SERVERS}
+        expected["bioinformatics-mcp"] = "common.cli:main"
+        self.assertEqual(entries, expected)
 
     async def check_server(self, provider: str):
         count, tool, arguments = SERVERS[provider]

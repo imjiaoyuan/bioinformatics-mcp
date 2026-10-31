@@ -7,7 +7,19 @@ client at the installed executable, and pass credentials through environment
 variables. This page gives the exact configuration shape for common clients.
 If yours is missing, read the generic pattern first — most clients copy it.
 
-Throughout, replace `<REPOSITORY_ROOT>` with the absolute path of the cloned
+For globally installed commands (`uv tool`, pipx, or system packages), use
+`bioinformatics-mcp config publications pdb` to print ready-to-use
+`mcpServers` JSON with discovered absolute executable paths. Use
+`bioinformatics-mcp register publications pdb --config /path/to/mcp.json`
+to merge those entries directly into a plain `mcpServers` JSON file. Existing
+settings are preserved, conflicts require `--replace`, and the first original
+file is backed up with a `.bak` suffix. This command does not support JSONC or
+other client schemas. Use `config ... --format toml` for a Codex fragment.
+Export credentials before launching the client; JSON entries rely on inherited
+environment variables, while the TOML output includes `env_vars` for providers
+that use them. No repository checkout or `cwd` is required in either case.
+
+The manual development-install examples below use `<REPOSITORY_ROOT>` for the absolute path of the cloned
 `bioinformatics-mcp` checkout. Examples configure one or two servers; repeat
 the entry shape for each additional command you need. Prefer the smallest set
 that covers the task: every connected server adds its tool schemas to the
@@ -61,10 +73,9 @@ that nearly every client understands:
 }
 ```
 
-If your client has no `cwd` field, set `command` to an absolute path and start
-the client from the repository root, or point `env` at an absolute
-`REPOSITORY_ROOT`; the servers resolve no paths relative to the checkout, so
-`cwd` is a convenience rather than a requirement.
+If your client has no `cwd` field, set `command` to an absolute path. The
+servers resolve no paths relative to the checkout, so `cwd` is a convenience
+rather than a requirement.
 
 If your client's format is not on this page, convert from this pattern:
 `command` + `args` (here the executable path with no arguments), `env`, and

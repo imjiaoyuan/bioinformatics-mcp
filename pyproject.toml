@@ -14,6 +14,7 @@ dev = ["pytest>=8,<10", "build>=1,<2", "twine>=7,<8"]
 cellxgene = ["cellxgene-census>=1.18.0,<2", "tiledbsoma>=1.15.3,<2"]
 
 [project.scripts]
+bioinformatics-mcp = "common.cli:main"
 ncbi-mcp = "servers.ncbi_mcp.server:main"
 pdb-mcp = "servers.pdb_mcp.server:main"
 string-mcp = "servers.string_mcp.server:main"

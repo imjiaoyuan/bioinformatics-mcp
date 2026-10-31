@@ -3,11 +3,53 @@
 Copy the prompt below into your AI agent. 
 
 ```text
-Clone and use https://github.com/imjiaoyuan/bioinformatics-mcp. If it is already checked out, use that checkout.
-Read its README.md and AGENTS.md. List every available MCP server and its capabilities. For my task, choose the smallest useful set, install the project from the repository root, then read docs/mcp.md and follow its instructions to configure the selected servers in this agent's MCP configuration and verify each connection. Ask only when a choice or credential is required. Keep secrets in environment variables.
+Use https://github.com/imjiaoyuan/bioinformatics-mcp. Read its README.md and docs/mcp.md; if using a checkout, also read AGENTS.md.
+First check whether bioinformatics-mcp is already installed globally. If available, use `bioinformatics-mcp list` and reuse the installed commands without cloning or reinstalling. Otherwise use an existing checkout, or install with uv tool/pipx from the Git URL; use the documented venv installation if needed. List the available MCP servers and their capabilities, and choose the smallest useful set for my task. Generate configuration with `bioinformatics-mcp config <selected providers>` (use `--format toml` for Codex), or merge into an mcpServers JSON file with `bioinformatics-mcp register <selected providers> --config <path>`. Follow docs/mcp.md for other client formats and environment variables, then verify each connection. Ask only when a choice or credential is required. Keep secrets in environment variables.
 ```
 
-Installation commands must run **from the cloned repository root**, the directory containing `pyproject.toml`:
+### Global installation and quick registration
+
+For a global installation without a checkout, use uv (or pipx):
+
+```bash
+uv tool install git+https://github.com/imjiaoyuan/bioinformatics-mcp.git
+# Alternative:
+# pipx install git+https://github.com/imjiaoyuan/bioinformatics-mcp.git
+
+bioinformatics-mcp list
+bioinformatics-mcp config publications pdb
+```
+
+The management command discovers installed server executables and generates
+absolute paths; no repository directory or `cwd` is needed. This also works
+with system packages (including an AUR package that installs this project's
+console scripts); no particular package manager is required.
+
+Register selected servers in a client using an `mcpServers` JSON file, for
+example Cursor's global config:
+
+```bash
+bioinformatics-mcp register publications pdb --config ~/.cursor/mcp.json
+```
+
+Existing settings and unrelated servers are preserved. A differing entry with
+the same name requires `--replace`; the first original file is saved as
+`mcp.json.bak`. The target must be plain JSON using `mcpServers`, not JSONC,
+OpenCode's `mcp` format, or TOML. Configuration does not test the connection;
+restart/reload the client and verify its tools. Export required environment
+variables before launching the client; no credentials are copied into files.
+
+For Codex, print a TOML fragment and merge it into `~/.codex/config.toml`:
+
+```bash
+bioinformatics-mcp config publications ncbi --format toml
+```
+
+See [Connecting MCP clients](docs/mcp.md) for client-specific instructions.
+
+### Development installation
+
+Development installation commands must run **from the cloned repository root**, the directory containing `pyproject.toml`:
 
 ```bash
 git clone https://github.com/imjiaoyuan/bioinformatics-mcp.git
@@ -17,7 +59,7 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-The install creates these executable MCP servers:
+The install creates a `bioinformatics-mcp` management command and these executable MCP servers:
 
 | Command | Provider |
 | --- | --- |
@@ -65,7 +107,8 @@ continue using the original `.venv`.
 
 ## Agent configuration
 
-Each command is an MCP stdio server. An agent should configure the selected command with the repository root as its working directory. For example:
+Each provider command is an MCP stdio server. Configure its installed executable;
+the repository working directory is optional. For a development install:
 
 ```json
 {
