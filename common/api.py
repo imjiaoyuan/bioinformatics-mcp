@@ -17,9 +17,10 @@ def page(limit: int, offset: int) -> dict:
 
 
 async def json_response(url: str, params: dict | None = None, *, body: Any = None,
-                        interval: float = 0.35) -> tuple[Any, dict]:
+                        interval: float = 0.35, max_bytes: int = 8_000_000) -> tuple[Any, dict]:
     response = await request("GET" if body is None else "POST", url, params=params,
-                             json=body, retryable=body is not None, interval=interval)
+                             json=body, retryable=body is not None, interval=interval,
+                             max_bytes=max_bytes)
     return response.json(), {"source_url": str(response.url)}
 
 

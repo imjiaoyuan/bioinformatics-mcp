@@ -42,16 +42,22 @@ The install creates these executable MCP servers:
 | `opentargets-mcp` | Target/disease/drug annotations, association scores and evidence |
 | `cbioportal-mcp` | Public cancer studies, clinical data, mutations and molecular measurements |
 
-The base install supplies all 20 commands. CELLxGENE data queries additionally
-need the optional SDK. Python 3.12 is recommended for this extra; native
-TileDB-SOMA wheels may be unavailable for newer Python versions. Use a separate
-environment if the existing environment runs Python 3.14:
+The base install supplies all 20 commands and works on Python 3.10 through
+3.14. `cellxgene-mcp` follows the same baseline: version listings, dataset
+search and H5AD URLs are served from public REST APIs with no extra
+dependencies. Only the cell-level Census tools (`cellxgene_cells`,
+`cellxgene_genes`, `cellxgene_expression`) need the optional SDK, whose native
+TileDB-SOMA wheels currently cover Python 3.10-3.13 only. Without the SDK
+those three tools return a clear error; everything else keeps working. To
+enable them, use a separate 3.10-3.13 environment:
 
 ```bash
 python3.12 -m venv .venv-cellxgene
 source .venv-cellxgene/bin/activate
 python -m pip install -e '.[cellxgene]'
 ```
+
+Any Python 3.10-3.13 works for this extra; 3.12 is one known-good choice.
 
 This uses standard Python, venv and pip. No additional environment manager is required.
 Configure CELLxGENE with `.venv-cellxgene/bin/cellxgene-mcp`; other commands can
@@ -287,7 +293,7 @@ successful responses. The registered command list and tool counts are asserted
 in `tests/test_mcp_transport.py`; update it when adding a server or tool.
 A local SOMA dataframe test runs when the optional CELLxGENE dependency is
 installed and skips otherwise. To run that test, install `'.[dev,cellxgene]'`
-in a Python 3.12 environment.
+in any Python 3.10-3.13 environment.
 
 ### Continuous integration
 
