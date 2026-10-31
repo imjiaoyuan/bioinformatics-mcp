@@ -4,7 +4,7 @@ Copy the prompt below into your AI agent.
 
 ```text
 Clone and use https://github.com/imjiaoyuan/bioinformatics-mcp. If it is already checked out, use that checkout.
-Read its README.md and AGENTS.md. List every available MCP server and its capabilities. For my task, choose the smallest useful set, install the project from the repository root, configure the selected servers in this agent's MCP configuration, and verify each connection. Ask only when a choice or credential is required. Keep secrets in environment variables.
+Read its README.md and AGENTS.md. List every available MCP server and its capabilities. For my task, choose the smallest useful set, install the project from the repository root, then read docs/mcp.md and follow its instructions to configure the selected servers in this agent's MCP configuration and verify each connection. Ask only when a choice or credential is required. Keep secrets in environment variables.
 ```
 
 Installation commands must run **from the cloned repository root**, the directory containing `pyproject.toml`:
@@ -78,10 +78,45 @@ Each command is an MCP stdio server. An agent should configure the selected comm
 }
 ```
 
-Use the equivalent MCP configuration file or CLI command for Codex, Claude Code, Pi, OpenCode, or DeepSeek Harness. `NCBI_EMAIL` is required for NCBI; `NCBI_API_KEY` is optional and only needed for higher request rates.
+The servers use only the standard MCP stdio protocol, so any MCP-capable client
+works the same way. Exact configuration snippets for Claude Code, Codex, Pi,
+OpenCode, DeepSeek Harness (yak), and the generic `mcpServers` JSON dialect
+are in [Connecting MCP clients](docs/mcp.md).
 
-For Codex, forward existing environment variables using `env_vars`; values such as
-`"${NCBI_EMAIL}"` in an `env` table are literal strings:
+### Environment variables
+
+Servers read configuration directly from their process environment:
+
+| Variable | Used by | Required | Purpose |
+| --- | --- | --- | --- |
+| `NCBI_EMAIL` | `ncbi-mcp` | Yes | Entrez contact address |
+| `NCBI_API_KEY` | `ncbi-mcp` | No | Higher request rates |
+| `NCBI_TOOL` | `ncbi-mcp` | No | Entrez tool name (default `ncbi-mcp`) |
+| `NCBI_EMAIL` | `publications-mcp` | No | Contact address in the HTTP User-Agent |
+| `BIOC_VERSION` | `bioconductor-mcp` | No | Bioconductor release (default `3.21`) |
+
+Whatever client you use, ensure these variables reach the server process. Most
+MCP clients support an `env` field on the server entry, which is set verbatim in
+the child process environment:
+
+```json
+{
+  "mcpServers": {
+    "ncbi": {
+      "command": "<REPOSITORY_ROOT>/.venv/bin/ncbi-mcp",
+      "cwd": "<REPOSITORY_ROOT>",
+      "env": {"NCBI_EMAIL": "you@example.org", "NCBI_API_KEY": "..."}
+    }
+  }
+}
+```
+
+Alternatively, export the variables before starting the agent; a stdio server
+inherits its parent environment. For Codex, forward existing variables with
+`env_vars` instead — values such as `"${NCBI_EMAIL}"` in an `env` table are
+literal strings, not expansions. Per-client configuration, including how each
+client passes these variables and where its config file lives, is documented in
+[Connecting MCP clients](docs/mcp.md).
 
 ```toml
 [mcp_servers.ncbi]
@@ -90,10 +125,8 @@ cwd = "<REPOSITORY_ROOT>"
 env_vars = ["NCBI_EMAIL", "NCBI_API_KEY", "NCBI_TOOL"]
 ```
 
-Export these variables before starting the agent. Do not store credentials in the
-repository. Bioconductor defaults to release 3.21; set `BIOC_VERSION` in the server
-environment to select another release. `string_interactions.limit` caps returned
-edges locally; it does not expand the input protein set.
+Do not store credentials in the repository. `string_interactions.limit` caps
+returned edges locally; it does not expand the input protein set.
 
 ## Additional provider tools
 
