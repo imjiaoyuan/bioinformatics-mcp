@@ -212,43 +212,51 @@ MCP tools appear prefixed with the server name (for example
 `ncbi_pubmed_search`); you can refer to them as `use ncbi` in prompts, or
 enable/disable them (glob patterns allowed) under `tools`.
 
-## DeepSeek Harness (yak)
+## DeepSeek Harness (dsh)
 
-yak bridges MCP servers through its resident `mcp_bridge` extension.
-Configuration lives in `~/.yak/extensions/mcp.json` (an `{"mcpServers": ...}`
-wrapper is unwrapped when present):
+DSH mounts MCP servers as loader entries through the
+`@deepseek-ai/dsh-mcp-client` plugin; there is no JSON file. Add an `insert:`
+list to the profile patch layer, `~/.dsh/profiles/<profile>/cordis.patch.yml`
+(one entry per server), after any existing patch entries:
 
-```json
-{
-  "mcpServers": {
-    "publications": {
-      "command": "<REPOSITORY_ROOT>/.venv/bin/publications-mcp"
-    },
-    "ncbi": {
-      "command": "<REPOSITORY_ROOT>/.venv/bin/ncbi-mcp",
-      "env": {"NCBI_EMAIL": "${NCBI_EMAIL}", "NCBI_API_KEY": "${NCBI_API_KEY}"}
-    }
-  }
-}
+```yaml
+- insert:
+    - id: mcp-publications
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: publications
+        transport: stdio
+        command: "<REPOSITORY_ROOT>/.venv/bin/publications-mcp"
+
+    - id: mcp-ncbi
+      name: "@deepseek-ai/dsh-mcp-client"
+      config:
+        serverName: ncbi
+        transport: stdio
+        command: "<REPOSITORY_ROOT>/.venv/bin/ncbi-mcp"
+        env:
+          NCBI_EMAIL: you@example.org
+          NCBI_API_KEY: "..."
 ```
 
-Notes specific to the bridge:
+Notes specific to DSH:
 
-- `env` rides along with the inherited environment; `${VAR}` in any string
-  value expands from the environment, and an unset variable is an error
-  rather than an empty string. Export `NCBI_EMAIL` before starting yak.
-- There is no `cwd` field; the server inherits yak's working directory. This
-  is fine for these servers, which resolve no paths relative to the checkout.
-- Tools mount as `<server>__<tool>` (for example `ncbi__pubmed_search`) and
-  a `tools` filter per entry can trim the mounted set before schemas reach
-  the context:
-  `"tools": {"only": ["pubmed_*"]}`.
-- `mcp_bridge` must not be in `extensions.disabled` in `~/.yak/config.json`.
-- A server that fails to start or finish the initialize handshake is skipped
-  with a warning; the rest keep working. `tool_timeout` (default 120s)
-  bounds every call.
-- Verify by asking yak to list its tools (or calling a cheap one) and
-  checking that the `ncbi__...` / `publications__...` entries appear.
+- Each server is one `@deepseek-ai/dsh-mcp-client` entry; give every entry a
+  unique `id` (arbitrary, for patch targeting) and a unique `serverName`
+  (`[A-Za-z0-9_-]{1,32}`, the tool namespace).
+- `env` values must be literals; merge over a scrubbed parent environment, so
+  inherited variables are also visible unless a credential-shaped name was
+  scrubbed. There is no `${VAR}` expansion.
+- `cwd` is supported but unnecessary here; Streamable HTTP servers use
+  `transport: streamable-http` with `url` (and optional `headers`) instead of
+  `command`.
+- Tools mount as `mcp__<serverName>__<tool>` (for example
+  `mcp__ncbi__pubmed_search`). A connection failure logs an error and the
+  harness still starts; `failOnStartupError: true` rejects activation instead.
+- Check the composed tree with `dsh --profile <profile> --dump-config` (the
+  two inserted entries must appear), then restart the profile and ask the
+  agent to list its tools and confirm the `mcp__ncbi__...` /
+  `mcp__publications__...` entries appear.
 
 ## Claude Desktop, Cursor, and other clients
 

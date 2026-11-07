@@ -123,7 +123,7 @@ the repository working directory is optional. For a development install:
 
 The servers use only the standard MCP stdio protocol, so any MCP-capable client
 works the same way. Exact configuration snippets for Claude Code, Codex, Pi,
-OpenCode, DeepSeek Harness (yak), and the generic `mcpServers` JSON dialect
+OpenCode, DeepSeek Harness (DSH), and the generic `mcpServers` JSON dialect
 are in [Connecting MCP clients](docs/mcp.md).
 
 ### Environment variables
