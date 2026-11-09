@@ -48,6 +48,10 @@ Environment variables servers read from their process environment:
 | `NCBI_TOOL` | `ncbi-mcp` | No | Entrez tool name (default `ncbi-mcp`) |
 | `NCBI_EMAIL` | `publications-mcp` | No | Contact address in the HTTP User-Agent |
 | `BIOC_VERSION` | `bioconductor-mcp` | No | Bioconductor release (default `3.21`) |
+| `NCBI_EMAIL` | `sra-mcp`, `clinvar-mcp` | Yes | Entrez contact address |
+| `NCBI_API_KEY` | `sra-mcp`, `clinvar-mcp` | No | Higher request rates |
+| `BIOGRID_API_KEY` | `biogrid-mcp` | Yes | Free key from webservice.thebiogrid.org registration |
+| `DISGENET_API_KEY` | `disgenet-mcp` | Yes | Free academic key from DisGeNET registration |
 
 No other server needs credentials. Keep secrets out of the repository.
 

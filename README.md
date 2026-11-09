@@ -83,8 +83,33 @@ The install creates a `bioinformatics-mcp` management command and these executab
 | `gwas-mcp` | GWAS Catalog REST v2 traits, studies, curated associations and variants |
 | `opentargets-mcp` | Target/disease/drug annotations, association scores and evidence |
 | `cbioportal-mcp` | Public cancer studies, clinical data, mutations and molecular measurements |
+| `sra-mcp` | NCBI SRA run metadata search and study/run lookup |
+| `gtex-mcp` | GTEx tissue expression, gene search and eQTLs |
+| `hpa-mcp` | Human Protein Atlas tissue, cell, pathology and subcellular annotations |
+| `alphafold-mcp` | AlphaFold DB predicted structure metadata, confidence and file URLs |
+| `emdb-mcp` | EMDB cryo-EM entries, resolution and map file references |
+| `kegg-mcp` | KEGG REST pathway, gene and compound retrieval |
+| `panglao-mcp` | PanglaoDB cell-type marker genes |
+| `intact-mcp` | IntAct molecular interactions with MI scores and participants |
+| `biogrid-mcp` | BioGRID physical and genetic interactions (API key) |
+| `depmap-mcp` | DepMap datasets, cell lines, dependencies and compound sensitivity |
+| `civic-mcp` | CIViC genes, variants and evidence items |
+| `clinvar-mcp` | ClinVar variant clinical significance and RCV records |
+| `pharmgkb-mcp` | PharmGKB drugs, genes, variants and clinical annotations |
+| `disgenet-mcp` | DisGeNET gene/variant-disease associations (API key) |
+| `mondo-mcp` | MONDO disease ontology entries, cross-references and children |
+| `hpo-mcp` | HPO phenotype terms, hierarchy and gene/disease links |
+| `quickgo-mcp` | QuickGO GO entries, annotations and slimming |
+| `singlecell-mcp` | Human Cell Atlas and Single Cell Portal study/sample metadata |
+| `vep-mcp` | Ensembl VEP variant consequence annotation (single, batch, region) |
+| `ucsc-mcp` | UCSC Genome Browser genomes, tracks and range data |
+| `mygene-mcp` | MyGene.info gene query/batch and MyVariants.info annotations |
+| `bigg-mcp` | BiGG metabolic models, reactions and metabolites |
+| `bgee-mcp` | Bgee gene expression by anatomical entity and species |
+| `pdbe-mcp` | PDBe SIFTS mappings and PDBe-KB aggregated entry summaries |
+| `msigdb-mcp` | MSigDB gene set details, members and collection catalog |
 
-The base install supplies all 20 commands and works on Python 3.10 through
+The base install supplies all 45 commands and works on Python 3.10 through
 3.14. `cellxgene-mcp` follows the same baseline: version listings, dataset
 search and H5AD URLs are served from public REST APIs with no extra
 dependencies. Only the cell-level Census tools (`cellxgene_cells`,
@@ -137,6 +162,10 @@ Servers read configuration directly from their process environment:
 | `NCBI_TOOL` | `ncbi-mcp` | No | Entrez tool name (default `ncbi-mcp`) |
 | `NCBI_EMAIL` | `publications-mcp` | No | Contact address in the HTTP User-Agent |
 | `BIOC_VERSION` | `bioconductor-mcp` | No | Bioconductor release (default `3.21`) |
+| `NCBI_EMAIL` | `sra-mcp`, `clinvar-mcp` | Yes | Entrez contact address |
+| `NCBI_API_KEY` | `sra-mcp`, `clinvar-mcp` | No | Higher request rates |
+| `BIOGRID_API_KEY` | `biogrid-mcp` | Yes | Free key from webservice.thebiogrid.org registration |
+| `DISGENET_API_KEY` | `disgenet-mcp` | Yes | Free academic key from DisGeNET registration |
 
 Whatever client you use, ensure these variables reach the server process. Most
 MCP clients support an `env` field on the server entry, which is set verbatim in
@@ -345,6 +374,65 @@ availability does not grant additional rights to source publications or datasets
 See [integration validation notes](docs/new-provider-validation.md) for tested
 versions, live checks and limitations.
 
+### SRA and ClinVar (NCBI E-utilities)
+
+`sra-mcp` searches NCBI SRA run metadata and resolves studies and runs through
+Entrez `esearch`/`esummary` (database `sra`); it overlaps deliberately with the
+generic NCBI tools and the ENA server, which remain the preferred route for
+FASTQ-level metadata. `clinvar-mcp` searches variant clinical significance and
+resolves RCV records through E-utilities (database `clinvar`). Both require
+`NCBI_EMAIL`; `NCBI_API_KEY` stays optional.
+
+### GTEx, HPA, AlphaFold DB, EMDB and KEGG
+
+`gtex-mcp` queries tissue lists, median and tissue-specific gene expression and
+eQTLs. `hpa-mcp` retrieves tissue, cell-type, pathology and subcellular
+annotations; respect Human Protein Atlas copyright terms when republishing.
+`alphafold-mcp` returns prediction metadata, confidence and model file URLs
+without downloading structures. `emdb-mcp` reads cryo-EM entries, resolution
+and map file references. `kegg-mcp` uses the public KEGG REST endpoints
+(list/find/get/link/conv); selecting KEGG does not grant rights to its data.
+
+### Interactions, clinical and associations
+
+`intact-mcp` queries IntAct interactions with MI scores and participants.
+`biogrid-mcp` requires `BIOGRID_API_KEY` (free registration); the key is read
+from the environment and never stored. `civic-mcp` and `clinvar-mcp` cover
+variant-to-evidence and variant-to-significance navigation;
+`pharmgkb-mcp` covers drug-gene-variant annotations; `disgenet-mcp` requires
+`DISGENET_API_KEY` (free academic registration) for gene/variant-disease
+associations. Association scores are evidence weights, not effect sizes.
+
+### Ontologies, GO and expression
+
+`mondo-mcp` reads the official MONDO release for entries, cross-references and
+children. `hpo-mcp` navigates HPO terms, hierarchy and gene/disease links.
+`quickgo-mcp` retrieves GO entries, annotations and slimmed sets; enrichment
+analysis remains in `gprofiler-mcp`. `bgee-mcp` queries gene expression per
+anatomical entity across species. `panglao-mcp` serves cell-type marker genes
+from the PanglaoDB snapshot (2020-03-27) and does not reflect later updates.
+
+### Structure and model resources
+
+`pdbe-mcp` exposes PDBe SIFTS UniProt/ENA mappings, PDBe-KB aggregated summaries
+and ligand or modified-residue information for PDB entries; `pdb-mcp` remains
+the route for entry and file metadata. `vep-mcp` annotates variant consequences
+through the Ensembl VEP REST endpoints (single, batch and region calls).
+`ucsc-mcp` lists genomes, tracks and chromosomes and fetches range data.
+`mygene-mcp` covers MyGene.info query/batch annotation and MyVariants.info
+variant annotation. `bigg-mcp` retrieves BiGG genome-scale models, reactions
+and metabolites. `singlecell-mcp` searches Human Cell Atlas (Azul) and Broad
+Single Cell Portal study, sample and file metadata; no data download starts.
+`msigdb-mcp` reads public MSigDB gene set detail and members per species;
+upstream keyword search and collection browsing require a login, so collections
+are served from a curated static catalog and no fake search tool is provided.
+
+Sources deliberately not integrated: the eQTL Catalogue REST API is deprecated
+(HTTP 410; FTP/tabix downloads only, outside this project's no-download scope)
+and the GWAS Atlas host is unreachable, so `eqtl-mcp` was dropped; GWAS trait
+metadata remains available through `gwas-mcp`. DrugBank, OMIM, MetaCyc, VMH and
+CellMarker have no stable free API or restrict redistribution by license.
+
 ## Development
 
 Cancer-data API research and further integration options are documented in
@@ -362,7 +450,7 @@ python -m pip check
 ```
 
 Regression tests use mocked HTTP/SDK responses and need no network or API keys.
-Transport tests start all 20 installed console scripts from temporary working
+Transport tests start all 45 installed console scripts from temporary working
 directories, initialize stdio connections, discover tools and check validation
 responses without contacting providers. Local-only PDB/CNCB tools also exercise
 successful responses. The registered command list and tool counts are asserted
@@ -381,7 +469,7 @@ in any Python 3.10-3.13 environment.
   TileDB-SOMA wheel, verifies imports and runs the full suite including local SOMA.
 - A Python 3.12 packaging job builds an sdist and a wheel from that sdist, checks
   metadata with Twine, then installs each artifact into its own clean venv and
-  exercises all 20 installed MCP commands outside the source checkout.
+  exercises all 45 installed MCP commands outside the source checkout.
 
 Run the packaging checks locally with:
 
