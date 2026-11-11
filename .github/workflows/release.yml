@@ -1,0 +1,105 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate release version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Require the tag to match the package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          version = tomllib.loads(Path('pyproject.toml').read_text())['project']['version']
+          tag = os.environ['RELEASE_TAG']
+          if tag != f'v{version}':
+              raise SystemExit(f'Tag {tag!r} does not match package version {version!r}')
+          PY
+
+  checks:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: Publish GitHub Release
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-distributions
+          path: dist
+      - name: Generate checksums
+        working-directory: dist
+        run: sha256sum *.whl *.tar.gz > SHA256SUMS
+      - name: Build release notes from commits since the previous tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          PREVIOUS=$(git describe --tags --match 'v*' --abbrev=0 "${RELEASE_TAG}^" 2>/dev/null || true)
+          RANGE="$RELEASE_TAG"
+          if [ -n "$PREVIOUS" ]; then
+            RANGE="$PREVIOUS..$RELEASE_TAG"
+          fi
+          {
+            echo "## Changes"
+            echo
+            git log --format="- %s ([%h]($REPOSITORY_URL/commit/%H))" "$RANGE"
+            echo
+            echo "**Release commit:** $(git rev-parse HEAD)"
+            echo
+            if [ -n "$PREVIOUS" ]; then
+              echo "**Full changelog:** $REPOSITORY_URL/compare/$PREVIOUS...$RELEASE_TAG"
+            else
+              echo "**Full history:** $REPOSITORY_URL/commits/$RELEASE_TAG"
+            fi
+            echo
+            echo '## Install / update'
+            echo
+            echo 'Requires Python 3.10 or newer.'
+            echo
+            echo '```bash'
+            echo "uv tool install --upgrade git+$REPOSITORY_URL.git@$RELEASE_TAG"
+            echo 'bioinformatics-mcp list'
+            echo '```'
+            echo
+            echo 'Assets: Python wheel, source distribution, and SHA256SUMS. All CI checks passed, including Python 3.10–3.14, CELLxGENE/local SOMA, and clean installation of both distributions.'
+          } > release-notes.md
+      - name: Publish validated distributions and generated notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" dist/*.whl dist/*.tar.gz dist/SHA256SUMS \
+            --verify-tag --title "$RELEASE_TAG" --notes-file release-notes.md \
+            --prerelease="$(if [[ "$RELEASE_TAG" == *-* ]]; then echo true; else echo false; fi)"

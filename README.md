@@ -89,6 +89,21 @@ bioinformatics-mcp config publications ncbi --format toml
 
 See [Connecting MCP clients](docs/mcp.md) for client-specific instructions.
 
+### Releases
+
+Pushing a `v*` tag automatically runs the release workflow. The tag must match
+the version in `pyproject.toml` (for example, `v0.1.0` for version `0.1.0`).
+The workflow reuses the full CI suite, including the Python version matrix,
+optional CELLxGENE checks, and clean installation of the wheel and source
+distribution. Only after all checks pass does it publish a GitHub Release with
+those validated packages and `SHA256SUMS`.
+
+Release notes include commit subjects and links since the previous `v*` tag
+(all commits for the first release), the release commit, a changelog link, and
+an installation command pinned to the tag. Tags containing a hyphen are marked
+as prereleases. This workflow publishes to GitHub Releases; it does not upload
+packages to PyPI.
+
 ### Development installation
 
 Development installation commands must run **from the cloned repository root**, the directory containing `pyproject.toml`:
