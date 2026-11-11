@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import quote
 
 from common.api import page
-from common.http import identifier, request, text
+from common.http import identifier, request, safe_url, text
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("sra")
@@ -44,11 +44,13 @@ async def _get(endpoint: str, params: dict[str, Any]) -> dict:
     data = response.json()
     if isinstance(data, dict) and "error" in data:
         raise RuntimeError(f"NCBI error: {data['error']}")
-    return {**data, "source_url": str(response.url)}
+    return {**data, "source_url": safe_url(response.url)}
 
 
 async def _search_ids(term: str, limit: int, offset: int) -> tuple[str, list[str]]:
-    data = await _get("esearch", {"db": "sra", "term": term, **page(limit, offset)})
+    paging = page(limit, offset)
+    data = await _get("esearch", {"db": "sra", "term": term,
+                                  "retmax": paging["limit"], "retstart": paging["offset"]})
     result = data.get("esearchresult", {})
     return result.get("count", "0"), result.get("idlist", [])
 
@@ -75,22 +77,24 @@ def _summarize(summary: dict[str, Any]) -> dict[str, Any]:
     record: dict[str, Any] = {"uid": summary.get("uid"),
                               "createdate": summary.get("createdate"),
                               "updatedate": summary.get("updatedate")}
-    if expxml := _parse_xml(summary.get("expxml", "")):
-        record.update({"title": expxml.get("text"),
-                      "platform": expxml.get("Platform"),
-                      "instrument_model": expxml.get("instrument_model"),
-                      "experiment": expxml.get("Experiment"),
-                      "study": expxml.get("Study"),
-                      "sample": expxml.get("Sample"),
-                      "organism": expxml.get("Organism"),
-                      "bioproject": expxml.get("Bioproject"),
-                      "biosample": expxml.get("Biosample"),
-                      "library": expxml.get("Library_descriptor"),
-                      "submitter": expxml.get("Submitter"),
-                      "statistics": expxml.get("Statistics")})
-    record["runs"] = [run for run in (_parse_xml(line) for line in
-                                      (summary.get("runs", "").replace("><", ">\n<").splitlines()))
-                      if run and "acc" in run]
+    try:
+        root = ET.fromstring("<root>" + summary.get("expxml", "") + "</root>")
+        record["title"] = root.findtext(".//Title")
+        platform = root.find(".//Platform")
+        record["instrument_model"] = platform.get("instrument_model") if platform is not None else None
+        for field, tag in (("platform", "Platform"), ("experiment", "Experiment"), ("study", "Study"),
+                           ("sample", "Sample"), ("organism", "Organism"), ("bioproject", "Bioproject"),
+                           ("biosample", "Biosample"), ("library", "Library_descriptor"),
+                           ("submitter", "Submitter"), ("statistics", "Statistics")):
+            record[field] = [_parse_xml(ET.tostring(node, encoding="unicode")) for node in root.iter(tag)] or None
+    except ET.ParseError:
+        record["metadata_error"] = "Invalid SRA experiment XML"
+    try:
+        runs = ET.fromstring("<root>" + summary.get("runs", "") + "</root>")
+        record["runs"] = [dict(node.attrib) for node in runs.iter("Run") if node.get("acc")]
+    except ET.ParseError:
+        record["runs"] = []
+        record["runs_error"] = "Invalid SRA run XML"
     return record
 
 
@@ -102,7 +106,10 @@ async def sra_search(query: str, limit: int = 20, offset: int = 0) -> dict:
     ``strategy[Filter]``; combine terms with AND/OR.
     """
     count, ids = await _search_ids(text(query), limit, offset)
-    return {"query": query, "count": int(count), "uids": ids,
+    count = int(count)
+    return {**page(limit, offset), "query": query, "count": count, "uids": ids,
+            "truncated": offset + len(ids) < count,
+            "next_offset": offset + len(ids) if ids and offset + len(ids) < count else None,
             "source_url": f"{BASE}/esearch.fcgi?db=sra&term={quote(query)}"}
 
 
@@ -157,7 +164,9 @@ async def sra_studies(query: str, limit: int = 20, offset: int = 0) -> dict:
              "experiments": sorted(entry["experiments"])}
             for entry in studies.values()]
     return {**page(limit, offset), "query": query, "count": int(count), "total": len(rows),
-            "results": rows, "truncated": offset + limit < len(rows), "pagination": "local",
+            "results": rows, "truncated": offset + len(uids) < int(count), "pagination": "upstream_experiments",
+            "next_offset": offset + len(uids) if uids and offset + len(uids) < int(count) else None,
+            "count_kind": "experiments", "total_kind": "studies_in_this_page",
             "source_url": f"{BASE}/esearch.fcgi?db=sra&term={quote(query)}"}
 
 

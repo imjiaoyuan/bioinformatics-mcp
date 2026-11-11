@@ -83,8 +83,10 @@ class ClinVarTests(HTTPTestCase):
         def handler(req):
             if "esearch" in req.url.path:
                 self.assertEqual(req.url.params["term"], "BRCA2[gene]")
-                self.assertEqual(req.url.params["limit"], "5")
-                self.assertEqual(req.url.params["offset"], "2")
+                self.assertEqual(req.url.params["retmax"], "5")
+                self.assertEqual(req.url.params["retstart"], "2")
+                self.assertNotIn("limit", req.url.params)
+                self.assertNotIn("offset", req.url.params)
                 self.assertEqual(req.url.params["tool"], "clinvar-mcp")
                 return httpx.Response(200, json={"esearchresult": {"count": "3", "idlist": ["5042478"]}})
             self.assertIn("5042478", req.url.params["id"].split(","))
@@ -163,6 +165,15 @@ class ClinVarTests(HTTPTestCase):
                                   else {"query": "x"} if func is server.clinvar_search
                                   else {"variation_id": "1"} if func is server.clinvar_variant
                                   else {"rcv_accession": "RCV000000001"}))
+
+    async def test_source_urls_remove_api_key_for_json_and_xml(self):
+        def handler(req):
+            self.assertEqual(req.url.params["api_key"], "TEST_SECRET")
+            return httpx.Response(200, text=RCV_XML) if "efetch" in req.url.path else httpx.Response(200, json=ESUMMARY)
+        with patch.dict(os.environ, {"NCBI_API_KEY": "TEST_SECRET"}), self.mock_http(handler):
+            for result in (await server.clinvar_variant("5042478"), await server.clinvar_rcv("RCV000000001")):
+                self.assertNotIn("TEST_SECRET", result["source_url"])
+                self.assertNotIn("email=", result["source_url"])
 
     async def test_api_error(self):
         with patch.dict(os.environ, {"NCBI_EMAIL": "researcher@example.org"}):

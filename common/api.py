@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from common.http import bounded, request
+from common.http import bounded, request, safe_url
 
 
 def choice(value: str, values: set[str], name: str) -> str:
@@ -21,7 +21,7 @@ async def json_response(url: str, params: dict | None = None, *, body: Any = Non
     response = await request("GET" if body is None else "POST", url, params=params,
                              json=body, retryable=body is not None, interval=interval,
                              max_bytes=max_bytes)
-    return response.json(), {"source_url": str(response.url)}
+    return response.json(), {"source_url": safe_url(response.url)}
 
 
 def local_page(rows: list, limit: int, offset: int, **metadata: Any) -> dict:

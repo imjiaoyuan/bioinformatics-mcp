@@ -12,7 +12,7 @@ from typing import Any
 from urllib.parse import quote
 
 from common.api import local_page, page
-from common.http import identifier, identifiers, request, text
+from common.http import identifier, identifiers, request, safe_url, text
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("clinvar")
@@ -37,15 +37,17 @@ async def _get(endpoint: str, params: dict[str, str], *, retmode: str = "json") 
                              params={**params, **config, "retmode": retmode},
                              interval=interval)
     if retmode == "xml":
-        return {**_parse_clinvarset(response.text), "source_url": str(response.url)}
+        return {**_parse_clinvarset(response.text), "source_url": safe_url(response.url)}
     data = response.json()
     if isinstance(data, dict) and "error" in data:
         raise RuntimeError(f"NCBI error: {data['error']}")
-    return {**data, "source_url": str(response.url)}
+    return {**data, "source_url": safe_url(response.url)}
 
 
 async def _search_ids(term: str, limit: int, offset: int) -> tuple[int, list[str]]:
-    data = await _get("esearch", {"db": "clinvar", "term": term, **page(limit, offset)})
+    paging = page(limit, offset)
+    data = await _get("esearch", {"db": "clinvar", "term": term,
+                                  "retmax": paging["limit"], "retstart": paging["offset"]})
     result = data.get("esearchresult", {})
     return int(result.get("count", "0")), result.get("idlist", [])
 

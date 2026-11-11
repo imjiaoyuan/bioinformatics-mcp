@@ -20,6 +20,47 @@ EXPSUM = {
 
 
 class SRATests(HTTPTestCase):
+    async def test_pagination_uses_entrez_parameters_and_reports_remaining_pages(self):
+        def handler(req):
+            self.assertEqual(req.url.params["retmax"], "2")
+            self.assertNotIn("limit", req.url.params)
+            self.assertNotIn("offset", req.url.params)
+            start = int(req.url.params["retstart"])
+            ids = ["1", "2", "3", "4"][start:start + 2]
+            return httpx.Response(200, json={"esearchresult": {"count": "4", "idlist": ids}})
+        with patch.dict(os.environ, {"NCBI_EMAIL": "test@example.invalid", "NCBI_API_KEY": "TEST_SECRET"}), self.mock_http(handler):
+            first = await server.sra_search("human", limit=2)
+            second = await server.sra_search("human", limit=2, offset=first["next_offset"])
+        self.assertEqual(first["uids"], ["1", "2"])
+        self.assertEqual(second["uids"], ["3", "4"])
+        self.assertFalse(second["truncated"])
+
+    async def test_study_pagination_counts_upstream_experiments(self):
+        async def get(endpoint, params):
+            if endpoint == "esearch":
+                return {"esearchresult": {"count": "8", "idlist": ["8"]}}
+            return {"result": {"8": EXPSUM}}
+        with patch.object(server, "_get", side_effect=get):
+            result = await server.sra_studies("human", limit=1)
+        self.assertTrue(result["truncated"])
+        self.assertEqual(result["next_offset"], 1)
+        self.assertEqual(result["total_kind"], "studies_in_this_page")
+
+    async def test_source_url_is_redacted_and_sibling_xml_fragments_are_parsed(self):
+        summary = dict(EXPSUM, expxml='<Summary><Title>Example</Title><Platform instrument_model="NovaSeq">ILLUMINA</Platform></Summary>'
+                       '<Study acc="SRP1"/><Organism ScientificName="Homo sapiens"/>')
+        def handler(req):
+            self.assertEqual(req.url.params["api_key"], "TEST_SECRET")
+            return httpx.Response(200, json={"result": {"1": summary}})
+        with patch.dict(os.environ, {"NCBI_EMAIL": "test@example.invalid", "NCBI_API_KEY": "TEST_SECRET"}), self.mock_http(handler):
+            result = await server._get("esummary", {"id": "1"})
+        self.assertNotIn("TEST_SECRET", result["source_url"])
+        self.assertNotIn("email=", result["source_url"])
+        parsed = server._summarize(summary)
+        self.assertEqual(parsed["title"], "Example")
+        self.assertEqual(parsed["study"][0]["acc"], "SRP1")
+        self.assertEqual(parsed["instrument_model"], "NovaSeq")
+
     async def test_search_metadata_and_studies(self):
         def handler(req):
             params = req.url.params

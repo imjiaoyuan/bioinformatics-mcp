@@ -2,15 +2,40 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 import time
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
 _locks: dict[str, asyncio.Lock] = {}
 _last_request: dict[str, float] = {}
+_PRIVATE_PARAMETERS = {"apikey", "ncbiapikey", "accesskey", "accesstoken", "token",
+                       "authorization", "password", "secret", "clientsecret", "email"}
+
+
+def safe_url(url: str | httpx.URL) -> str:
+    """Keep traceable query parameters while removing credentials and contact addresses."""
+    parts = urlsplit(str(url))
+    query = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)
+             if re.sub(r"[^a-z0-9]", "", key.lower()) not in _PRIVATE_PARAMETERS]
+    authority = parts.netloc.rsplit("@", 1)[-1]
+    return urlunsplit((parts.scheme, authority, parts.path, urlencode(query), ""))
+
+
+class _SafeHTTPLog(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = re.sub(r"https?://[^\s\"'<>]+", lambda match: safe_url(match.group()), record.getMessage())
+        message = re.sub(r"(?i)((?:api[_-]?key|accesskey|access_token|token|email|password|client_secret)=)[^&\s\"'<>]+",
+                         r"\1REDACTED", message)
+        record.msg, record.args = message, ()
+        return True
+
+
+for _logger_name in ("httpx", "httpcore", "httpcore.http11", "httpcore.http2", "httpcore.connection"):
+    logging.getLogger(_logger_name).addFilter(_SafeHTTPLog())
 
 
 def text(value: str, name: str = "query", maximum: int = 2000) -> str:
@@ -41,6 +66,7 @@ def identifiers(values: list[str], maximum: int = 1000) -> list[str]:
 
 async def request(method: str, url: str, *, params: dict | None = None,
                   json: Any = None, data: dict | None = None,
+                  headers: dict[str, str] | None = None,
                   max_bytes: int = 8_000_000, interval: float = 0.35,
                   retryable: bool = False) -> httpx.Response:
     """Bound responses and retry transient GET failures or explicitly idempotent requests once."""
@@ -51,7 +77,7 @@ async def request(method: str, url: str, *, params: dict | None = None,
             await asyncio.sleep(max(0, interval - (time.monotonic() - _last_request.get(host, 0))))
             try:
                 async with httpx.AsyncClient(timeout=45, follow_redirects=True,
-                                             headers={"User-Agent": "bioinformatics-mcp/0.1"}) as client:
+                                             headers={"User-Agent": "bioinformatics-mcp/0.1", **(headers or {})}) as client:
                     async with client.stream(method, url, params=params, json=json, data=data) as response:
                         if (method == "GET" or retryable) and response.status_code in {429, 500, 502, 503, 504} and attempt == 0:
                             try:
@@ -60,7 +86,13 @@ async def request(method: str, url: str, *, params: dict | None = None,
                                 delay = 1.0
                             await asyncio.sleep(delay)
                             continue
-                        response.raise_for_status()
+                        safe_request = httpx.Request(method, safe_url(response.url))
+                        try:
+                            response.raise_for_status()
+                        except httpx.HTTPStatusError:
+                            safe_response = httpx.Response(response.status_code, request=safe_request)
+                            raise httpx.HTTPStatusError(f"HTTP {response.status_code} for {safe_request.url}",
+                                                        request=safe_request, response=safe_response) from None
                         chunks: list[bytes] = []
                         size = 0
                         async for chunk in response.aiter_bytes():
@@ -72,7 +104,13 @@ async def request(method: str, url: str, *, params: dict | None = None,
                         headers = {k: v for k, v in response.headers.items()
                                    if k not in {"content-encoding", "content-length"}}
                         return httpx.Response(response.status_code, headers=headers,
-                                              content=b"".join(chunks), request=response.request)
+                                              content=b"".join(chunks), request=safe_request)
+            except httpx.RequestError as exc:
+                try:
+                    target = safe_url(exc.request.url)
+                except RuntimeError:
+                    target = safe_url(url)
+                raise type(exc)(f"Request failed for {target}", request=httpx.Request(method, target)) from None
             finally:
                 _last_request[host] = time.monotonic()
     raise RuntimeError("Request retry exhausted")
