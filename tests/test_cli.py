@@ -91,3 +91,56 @@ class CliTests(unittest.TestCase):
                 self.invoke("register", "pdb", "--config", str(path))
             self.assertEqual(json.loads(path.read_text())["mcpServers"]["pdb"]["command"],
                              "/usr/bin/pdb-mcp")
+
+
+class AggregatedConfigTests(unittest.TestCase):
+    def invoke(self, *arguments):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            cli.main(list(arguments))
+        return output.getvalue()
+
+    def test_serve_flag_emits_one_aggregated_entry(self):
+        with patch.object(cli, "find_command", return_value="/usr/bin/bioinformatics-mcp"):
+            config = json.loads(self.invoke("config", "pdb", "uniprot", "--serve"))
+        self.assertEqual(config, {"mcpServers": {"bioinformatics": {
+            "command": "/usr/bin/bioinformatics-mcp", "args": ["serve", "pdb", "uniprot"]}}})
+
+    def test_uvx_entries_avoid_fixed_paths(self):
+        with patch.object(cli.shutil, "which", return_value="/usr/bin/uvx"), \
+                patch.object(cli, "find_command", side_effect=AssertionError("must not locate paths")):
+            config = json.loads(self.invoke("config", "pdb", "--uvx"))
+        self.assertEqual(config, {"mcpServers": {"pdb": {
+            "command": "uvx", "args": ["--from", cli.SOURCE, "pdb-mcp"]}}})
+
+    def test_uvx_serve_combines_install_on_demand_with_aggregation(self):
+        with patch.object(cli.shutil, "which", return_value="/usr/bin/uvx"):
+            output = self.invoke("config", "ncbi", "--uvx", "--serve", "--format", "toml")
+        self.assertIn('command = "uvx"', output)
+        self.assertIn('"bioinformatics-mcp", "serve", "ncbi"', output)
+        self.assertIn('env_vars = ["NCBI_EMAIL", "NCBI_API_KEY", "NCBI_TOOL"]', output)
+
+    def test_uvx_requires_uv_installed(self):
+        with patch.object(cli.shutil, "which", return_value=None), \
+                redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            self.invoke("config", "pdb", "--uvx")
+        self.assertEqual(error.exception.code, 2)
+
+    def test_register_serve_writes_one_entry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "mcp.json"
+            with patch.object(cli, "find_command", return_value="/usr/bin/bioinformatics-mcp"):
+                self.invoke("register", "pdb", "alphafold", "--serve", "--config", str(path))
+            result = json.loads(path.read_text())["mcpServers"]
+        self.assertEqual(set(result), {"bioinformatics"})
+        self.assertEqual(result["bioinformatics"]["args"], ["serve", "pdb", "alphafold"])
+
+
+class AggregationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_build_registers_selected_provider_tools(self):
+        from common.serve import build
+        mcp = build(["alphafold", "pdb"])
+        names = [tool.name for tool in await mcp.list_tools()]
+        self.assertEqual(len(names), 7)
+        self.assertIn("alphafold_prediction", names)
+        self.assertIn("pdb_download_url", names)

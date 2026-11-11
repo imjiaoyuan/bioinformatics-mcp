@@ -7,6 +7,7 @@ import asyncio
 from importlib.metadata import distribution
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -110,6 +111,48 @@ class ServerTransportTests(unittest.IsolatedAsyncioTestCase):
                             self.assertIn("ngdc.cncb.ac.cn/databases", str(result.content))
 
             await asyncio.wait_for(check_connection(), timeout=20)
+
+
+class ManagementCommandTests(unittest.IsolatedAsyncioTestCase):
+    def script(self, name: str) -> str:
+        suffix = ".exe" if os.name == "nt" else ""
+        command = Path(sys.executable).parent / f"{name}{suffix}"
+        self.assertTrue(command.is_file(), f"Missing installed console script: {command}")
+        return str(command)
+
+    def test_call_invokes_one_tool(self):
+        result = subprocess.run([self.script("bioinformatics-mcp"), "call", "pdb", "pdb_download_url",
+                                 '{"pdb_id": "4HHB"}'], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("4hhb.cif", result.stdout)
+
+    def test_call_reports_unknown_tools(self):
+        result = subprocess.run([self.script("bioinformatics-mcp"), "call", "pdb", "not_a_tool"],
+                                capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("pdb_search", result.stderr)
+
+    async def test_serve_aggregates_selected_providers(self):
+        command = self.script("bioinformatics-mcp")
+        env = {key: value for key, value in os.environ.items()
+               if key not in {"PYTHONPATH", "PYTHONHOME"}}
+        with tempfile.TemporaryDirectory(prefix="bioinformatics-mcp-serve-") as directory:
+            params = StdioServerParameters(command=command, args=["serve", "pdb", "alphafold"],
+                                           cwd=directory, env=env)
+
+            async def check():
+                async with stdio_client(params) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
+                        names = [item.name for item in (await session.list_tools()).tools]
+                        self.assertEqual(len(names), 7)
+                        self.assertIn("pdb_download_url", names)
+                        self.assertIn("alphafold_prediction", names)
+                        result = await session.call_tool("pdb_download_url", {"pdb_id": "4HHB"})
+                        self.assertFalse(result.isError)
+                        self.assertIn("4hhb.cif", str(result.content))
+
+            await asyncio.wait_for(check(), timeout=30)
 
 
 def _transport_test(provider: str):
