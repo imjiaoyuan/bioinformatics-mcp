@@ -19,8 +19,9 @@ async def _get(path: str, params: dict | None = None):
 
 async def anaconda_search(query: str, limit: int = 20) -> list[dict]:
     """Search public Anaconda packages and channels."""
+    limit = bounded(limit, 100)
     data = await _get("/search", {"name": text(query)})
-    return data[:bounded(limit, 100)] if isinstance(data, list) else data
+    return data[:limit] if isinstance(data, list) else data
 
 
 async def anaconda_package(owner: str, package: str) -> dict:

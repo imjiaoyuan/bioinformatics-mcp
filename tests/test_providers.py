@@ -45,8 +45,11 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([f["version"] for f in files], ["2.0"])
 
     async def test_anaconda_search_rejects_out_of_range_limit(self):
-        with self.assertRaises(ValueError):
-            await anaconda.anaconda_search("samtools", limit=0)
+        with patch.object(anaconda, "_get") as get:
+            for limit in (0, -1, 101):
+                with self.subTest(limit=limit), self.assertRaises(ValueError):
+                    await anaconda.anaconda_search("samtools", limit=limit)
+            get.assert_not_called()
 
     async def test_ensembl_json_format_preserves_parameters(self):
         def handler(request):
