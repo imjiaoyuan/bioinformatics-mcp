@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.ucsc_mcp import api
 
 
-mcp = FastMCP("ucsc")
+mcp = MCPServer("ucsc")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

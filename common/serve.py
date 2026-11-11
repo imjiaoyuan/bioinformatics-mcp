@@ -3,11 +3,11 @@ from __future__ import annotations
 
 from importlib import import_module
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 
-def build(providers: list[str]) -> FastMCP:
-    mcp = FastMCP("bioinformatics", instructions=f"Aggregated bioinformatics providers: {', '.join(providers)}")
+def build(providers: list[str]) -> MCPServer:
+    mcp = MCPServer("bioinformatics", instructions=f"Aggregated bioinformatics providers: {', '.join(providers)}")
     registered: set[str] = set()
     for provider in providers:
         api = import_module(f"servers.{provider}_mcp.api")

@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.gprofiler_mcp import api
 
 
-mcp = FastMCP("gprofiler")
+mcp = MCPServer("gprofiler")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

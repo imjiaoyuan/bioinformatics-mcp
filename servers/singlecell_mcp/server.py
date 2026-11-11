@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.singlecell_mcp import api
 
 
-mcp = FastMCP("singlecell")
+mcp = MCPServer("singlecell")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

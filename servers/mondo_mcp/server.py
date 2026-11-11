@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.mondo_mcp import api
 
 
-mcp = FastMCP("mondo")
+mcp = MCPServer("mondo")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

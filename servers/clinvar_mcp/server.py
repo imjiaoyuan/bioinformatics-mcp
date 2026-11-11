@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.clinvar_mcp import api
 
 
-mcp = FastMCP("clinvar")
+mcp = MCPServer("clinvar")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

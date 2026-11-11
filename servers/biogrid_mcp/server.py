@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.biogrid_mcp import api
 
 
-mcp = FastMCP("biogrid")
+mcp = MCPServer("biogrid")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

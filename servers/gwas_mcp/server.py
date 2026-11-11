@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.gwas_mcp import api
 
 
-mcp = FastMCP("gwas")
+mcp = MCPServer("gwas")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

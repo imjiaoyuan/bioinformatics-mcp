@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.gtex_mcp import api
 
 
-mcp = FastMCP("gtex")
+mcp = MCPServer("gtex")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

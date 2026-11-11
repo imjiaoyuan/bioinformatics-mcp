@@ -32,8 +32,8 @@ async def check_rest_tools(session: ClientSession, have_sdk: bool) -> list[str]:
         result = await session.call_tool(tool, arguments)
         shown = ", ".join(f"{k}={v!r}" for k, v in arguments.items())
         summary = result.content[0].text[:160].replace("\n", " ") if result.content else ""
-        print(f"[{'ERROR' if result.isError else 'ok '}] {tool}({shown})\n      {summary}")
-        if result.isError:
+        print(f"[{'ERROR' if result.is_error else 'ok '}] {tool}({shown})\n      {summary}")
+        if result.is_error:
             failures.append(tool)
         else:
             check(result.content[0].text)
@@ -63,7 +63,7 @@ async def check_sdk_tools(session: ClientSession) -> list[str]:
         result = await session.call_tool("cellxgene_cells",
                                          {"tissue": "lung", "limit": 2, "scan_size": 10000,
                                           "after_joinid": after})
-        if result.isError:
+        if result.is_error:
             print("[ERROR] cellxgene_cells:", result.content[0].text[:200])
             return ["cellxgene_cells"]
         data = obj(result.content[0].text)
@@ -80,7 +80,7 @@ async def check_sdk_tools(session: ClientSession) -> list[str]:
         result = await session.call_tool("cellxgene_expression",
                                          {"cell_ids": [c["soma_joinid"] for c in cells[:2]],
                                           "gene_ids": ["ENSG00000141510"], "version": version})
-        if result.isError or not obj(result.content[0].text)["matrix"]:
+        if result.is_error or not obj(result.content[0].text)["matrix"]:
             failures.append("cellxgene_expression")
         else:
             print("[ok ] cellxgene_expression matrix:", obj(result.content[0].text)["matrix"])
@@ -104,7 +104,7 @@ async def main() -> int:
         async with ClientSession(read, write) as session:
             info = await session.initialize()
             names = sorted(t.name for t in (await session.list_tools()).tools)
-            print(f"connected: server={info.serverInfo.name} protocol={info.protocolVersion}")
+            print(f"connected: server={info.server_info.name} protocol={info.protocol_version}")
             print(f"tools ({len(names)}): {', '.join(names)}")
             failures = await check_rest_tools(session, have_sdk)
             if have_sdk:

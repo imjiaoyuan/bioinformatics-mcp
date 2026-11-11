@@ -174,6 +174,10 @@ record = await uniprot_entry("P12345")
 | `pdbe-mcp` | PDBe SIFTS mappings and PDBe-KB aggregated entry summaries |
 | `msigdb-mcp` | MSigDB gene set details, members and collection catalog |
 
+The base install uses the official MCP Python SDK v2 (`mcp>=2,<3`), with
+`MCPServer` for provider and aggregated servers. Servers accept both legacy
+initialize-based clients and v2 discovery-based clients.
+
 The base install supplies all 45 commands and works on Python 3.10 through
 3.14. `cellxgene-mcp` follows the same baseline: version listings, dataset
 search and H5AD URLs are served from public REST APIs with no extra

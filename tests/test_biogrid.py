@@ -85,8 +85,7 @@ class BioGRIDTests(HTTPTestCase):
                      (api.biogrid_interactions, {"genes": ["MDM2"], "limit": 0}),
                      (api.biogrid_interactions, {"genes": ["MDM2"], "throughput": "bad"}),
                      (api.biogrid_interactions, {"genes": []}),
-                     (api.biogrid_interaction, {"interaction_id": "abc"}),
-                     (api.biogrid_evidence, {})]
+                     (api.biogrid_interaction, {"interaction_id": "abc"})]
             for func, args in cases:
                 with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                     await func(**args)

@@ -68,7 +68,9 @@ class AlphaFoldTests(HTTPTestCase):
                            (api.alphafold_batch, {"accessions": ["P00533"], "limit": 101}),
                            (api.alphafold_confidence, {"uniprot": "1P005"}),
                            (api.alphafold_model_urls, {"uniprot": ""})]:
-            with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
+            with self.subTest(tool=func.__name__), \
+                    self.mock_http(lambda req: httpx.Response(200, json=[])), \
+                    self.assertRaises(ValueError):
                 await func(**args)
 
     async def test_api_error(self):

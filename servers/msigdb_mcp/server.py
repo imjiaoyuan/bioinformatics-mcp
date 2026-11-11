@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.msigdb_mcp import api
 
 
-mcp = FastMCP("msigdb")
+mcp = MCPServer("msigdb")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

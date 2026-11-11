@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.depmap_mcp import api
 
 
-mcp = FastMCP("depmap")
+mcp = MCPServer("depmap")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

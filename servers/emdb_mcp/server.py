@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.emdb_mcp import api
 
 
-mcp = FastMCP("emdb")
+mcp = MCPServer("emdb")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

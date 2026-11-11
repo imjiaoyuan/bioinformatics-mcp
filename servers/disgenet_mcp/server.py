@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.disgenet_mcp import api
 
 
-mcp = FastMCP("disgenet")
+mcp = MCPServer("disgenet")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

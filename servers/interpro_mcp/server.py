@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.interpro_mcp import api
 
 
-mcp = FastMCP("interpro")
+mcp = MCPServer("interpro")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

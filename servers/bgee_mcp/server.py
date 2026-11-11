@@ -1,9 +1,9 @@
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from servers.bgee_mcp import api
 
 
-mcp = FastMCP("bgee")
+mcp = MCPServer("bgee")
 
 for tool in api.TOOLS:
     mcp.add_tool(tool)

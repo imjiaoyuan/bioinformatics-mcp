@@ -5,6 +5,7 @@ it independent of the source checkout, test helpers and optional provider SDKs.
 """
 import asyncio
 from importlib.metadata import distribution
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -98,16 +99,16 @@ class ServerTransportTests(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(len(set(names)), count)
                         self.assertIn(tool, names)
                         result = await session.call_tool(tool, arguments)
-                        self.assertTrue(result.isError)
+                        self.assertTrue(result.is_error)
                         self.assertTrue(result.content)
                         # Also check a successful, local-only tool response when available.
                         if provider == "pdb":
                             result = await session.call_tool("pdb_download_url", {"pdb_id": "4HHB"})
-                            self.assertFalse(result.isError)
+                            self.assertFalse(result.is_error)
                             self.assertIn("4hhb.cif", str(result.content))
                         elif provider == "cncb":
                             result = await session.call_tool("cncb_database_catalog", {})
-                            self.assertFalse(result.isError)
+                            self.assertFalse(result.is_error)
                             self.assertIn("ngdc.cncb.ac.cn/databases", str(result.content))
 
             await asyncio.wait_for(check_connection(), timeout=20)
@@ -140,19 +141,26 @@ class ManagementCommandTests(unittest.IsolatedAsyncioTestCase):
             params = StdioServerParameters(command=command, args=["serve", "pdb", "alphafold"],
                                            cwd=directory, env=env)
 
-            async def check():
+            async def check(discover=False):
                 async with stdio_client(params) as (read, write):
                     async with ClientSession(read, write) as session:
-                        await session.initialize()
+                        if discover:
+                            await session.discover()
+                        else:
+                            await session.initialize()
                         names = [item.name for item in (await session.list_tools()).tools]
                         self.assertEqual(len(names), 7)
                         self.assertIn("pdb_download_url", names)
                         self.assertIn("alphafold_prediction", names)
                         result = await session.call_tool("pdb_download_url", {"pdb_id": "4HHB"})
-                        self.assertFalse(result.isError)
+                        self.assertFalse(result.is_error)
                         self.assertIn("4hhb.cif", str(result.content))
+                        self.assertEqual(json.loads(result.content[0].text)["pdb_id"], "4HHB")
+                        invalid = await session.call_tool("pdb_entry", {})
+                        self.assertTrue(invalid.is_error)
 
             await asyncio.wait_for(check(), timeout=30)
+            await asyncio.wait_for(check(discover=True), timeout=30)
 
 
 def _transport_test(provider: str):

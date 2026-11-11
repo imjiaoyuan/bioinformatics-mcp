@@ -37,9 +37,9 @@ async def call(command: str, tool: str, arguments: str, timeout: float) -> None:
                     failure = error
     if failure is not None:
         raise failure
-    if result.isError:
+    if result.is_error:
         raise RuntimeError(_text(result) or "tool reported an error")
-    content = result.structuredContent
+    content = result.structured_content
     if content is None:
         text = _text(result)
         try:
