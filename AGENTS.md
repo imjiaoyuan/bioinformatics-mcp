@@ -15,7 +15,7 @@ servers/cncb_mcp/
 servers/publications_mcp/
 ```
 
-Each package exposes a `server.py` with a `main()` entry point. `pyproject.toml` defines the executable names. Shared helpers belong in `common/`; do not copy transport, caching, or rate-limit logic between providers. Documentation is in `README.md`. Tests should be added under `tests/` as coverage grows.
+Each package keeps the provider logic and tool functions in `api.py` (exported through its `TOOLS` list) and exposes thin FastMCP wiring in `server.py` with a `main()` entry point. `pyproject.toml` defines the executable names. `bioinformatics-mcp serve` aggregates selected providers into one process, and `bioinformatics-mcp call` invokes a single tool over stdio. Shared helpers belong in `common/`; do not copy transport, caching, or rate-limit logic between providers. Documentation is in `README.md`. Tests should be added under `tests/` as coverage grows.
 
 ## Build, Test, and Development Commands
 

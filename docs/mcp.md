@@ -15,9 +15,26 @@ to merge those entries directly into a plain `mcpServers` JSON file. Existing
 settings are preserved, conflicts require `--replace`, and the first original
 file is backed up with a `.bak` suffix. This command does not support JSONC or
 other client schemas. Use `config ... --format toml` for a Codex fragment.
-Export credentials before launching the client; JSON entries rely on inherited
-environment variables, while the TOML output includes `env_vars` for providers
-that use them. No repository checkout or `cwd` is required in either case.
+Add `--serve` to collapse the selected providers into one `bioinformatics`
+entry whose command runs `bioinformatics-mcp serve <providers ...>` — one
+process and one entry instead of one per provider. Add `--uvx` to emit
+`uvx --from <repository URL> <provider>-mcp` entries that install on demand,
+so one configuration file works on any machine with uv and nothing
+pre-installed; `--serve --uvx` combines both. Export credentials before
+launching the client; JSON entries rely on inherited environment variables,
+while the TOML output includes `env_vars` naming the variables each selected
+provider reads. No repository checkout or `cwd` is required in either case.
+
+After registration, verify a connection without a client by calling one tool:
+
+```bash
+bioinformatics-mcp call pdb pdb_download_url '{"pdb_id": "4HHB"}'
+```
+
+`call` starts the provider's installed command, lists its tools, prints the
+result as JSON, and fails with the available tool names when the tool is
+unknown. It reads credentials from the inherited environment, so export
+`NCBI_EMAIL` and similar variables first.
 
 The manual development-install examples below use `<REPOSITORY_ROOT>` for the absolute path of the cloned
 `bioinformatics-mcp` checkout. Examples configure one or two servers; repeat

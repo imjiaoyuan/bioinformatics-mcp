@@ -4,7 +4,7 @@ Copy the prompt below into your AI agent.
 
 ```text
 Use https://github.com/imjiaoyuan/bioinformatics-mcp. Read its README.md and docs/mcp.md; if using a checkout, also read AGENTS.md.
-First check whether bioinformatics-mcp is already installed globally. If available, use `bioinformatics-mcp list` and reuse the installed commands without cloning or reinstalling. Otherwise use an existing checkout, or install with uv tool/pipx from the Git URL; use the documented venv installation if needed. List the available MCP servers and their capabilities, and choose the smallest useful set for my task. Generate configuration with `bioinformatics-mcp config <selected providers>` (use `--format toml` for Codex), or merge into an mcpServers JSON file with `bioinformatics-mcp register <selected providers> --config <path>`. Follow docs/mcp.md for other client formats and environment variables, then verify each connection. Ask only when a choice or credential is required. Keep secrets in environment variables.
+First check whether bioinformatics-mcp is already installed globally. If available, use `bioinformatics-mcp list` and reuse the installed commands without cloning or reinstalling. Otherwise use an existing checkout, or install with uv tool/pipx from the Git URL; use the documented venv installation if needed. List the available MCP servers and their capabilities, and choose the smallest useful set for my task. To keep client configuration small, prefer one aggregated server with `bioinformatics-mcp config <selected providers> --serve` over separate entries. Generate configuration with `bioinformatics-mcp config <selected providers>` (use `--format toml` for Codex, `--uvx` for entries that install on demand without fixed paths), or merge into an mcpServers JSON file with `bioinformatics-mcp register <selected providers> --config <path>`. Follow docs/mcp.md for other client formats and environment variables, then verify each connection with `bioinformatics-mcp call <provider> <tool> '<json arguments>'`. Ask only when a choice or credential is required. Keep secrets in environment variables.
 ```
 
 ### Global installation and quick registration
@@ -24,6 +24,48 @@ The management command discovers installed server executables and generates
 absolute paths; no repository directory or `cwd` is needed. This also works
 with system packages (including an AUR package that installs this project's
 console scripts); no particular package manager is required.
+
+#### Aggregated and install-on-demand configuration
+
+Every selected provider normally becomes its own client entry and process. Two
+flags reduce that footprint:
+
+```bash
+# One entry and one process serving pdb + uniprot tools together:
+bioinformatics-mcp config pdb uniprot --serve
+# Entries that run through uvx and install on demand, with no fixed paths:
+bioinformatics-mcp config pdb --uvx
+# Both at once:
+bioinformatics-mcp config pdb uniprot --serve --uvx
+```
+
+`--serve` emits a single `bioinformatics` entry whose command is
+`bioinformatics-mcp serve <providers ...>`; `register --serve` merges that
+entry into a JSON config. `--uvx` emits `uvx --from <this repository>
+<provider>-mcp` entries, so the same client configuration works on any machine
+with uv installed and nothing pre-installed. The flags combine with
+`--format toml` for Codex.
+
+The same aggregated process can be run directly, for example for HTTP-based
+clients or shared deployments:
+
+```bash
+bioinformatics-mcp serve pdb uniprot
+```
+
+#### Calling one tool without a client
+
+Use `call` to run a single tool over stdio and print the result as JSON —
+useful for verifying a connection after registration and for scripted smoke
+tests:
+
+```bash
+bioinformatics-mcp call pdb pdb_download_url '{"pdb_id": "4HHB"}'
+bioinformatics-mcp call uniprot uniprot_entry '{"accession": "P12345"}'
+```
+
+An unknown tool fails with the provider's available tool names; provider
+credentials come from the inherited environment.
 
 Register selected servers in a client using an `mcpServers` JSON file, for
 example Cursor's global config:
@@ -60,6 +102,14 @@ pip install -e .
 ```
 
 The install creates a `bioinformatics-mcp` management command and these executable MCP servers:
+
+Every package also exposes its provider logic as plain async functions in `servers/<provider>_mcp/api.py`, so Python scripts and notebooks can call the same tools without an MCP client:
+
+```python
+from servers.uniprot_mcp.api import uniprot_entry
+
+record = await uniprot_entry("P12345")
+```
 
 | Command | Provider |
 | --- | --- |
