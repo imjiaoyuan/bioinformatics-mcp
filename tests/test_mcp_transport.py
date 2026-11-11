@@ -37,7 +37,7 @@ SERVERS = {
     "publications": (4, "publication_search", {}),
     "reactome": (5, "reactome_search", {}),
     "string": (3, "string_resolve", {}),
-    "uniprot": (6, "uniprot_search", {}),
+    "uniprot": (7, "uniprot_search", {}),
     "sra": (3, "sra_search", {}),
     "gtex": (6, "gtex_gene_search", {}),
     "hpa": (6, "hpa_search", {}),

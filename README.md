@@ -332,7 +332,26 @@ are required for public records. [ENA API guide](https://ena-docs.readthedocs.io
 ### UniProt
 
 UniProt tools: `uniprot_search`, `uniprot_entry`, `uniprot_sequence`,
-`uniprot_mapping_submit`, `uniprot_mapping_status`, `uniprot_mapping_results`.
+`uniprot_function`, `uniprot_mapping_submit`, `uniprot_mapping_status`, `uniprot_mapping_results`.
+For a question such as "What does Arabidopsis MYB52 do?", call
+`uniprot_function(gene="MYB52", taxon_id=3702)`. It performs exact gene/alias
+search, retrieves full entries, and returns function annotations together with
+CAUTION/sequence warnings, phenotypes, localization, GO annotations, features,
+evidence codes and supporting PubMed/DOI references. For this example the
+reviewed entry is `Q6R0C4` (`MYB52_ARATH`, locus `At1g17950`); the contradictory
+positive/negative secondary-cell-wall phenotypes remain visible in `cautions`.
+Original annotation text and evidence are retained; an agent can summarize them
+in the user's language without treating predicted annotations as experiments.
+
+Provide the organism's NCBI `taxon_id` to disambiguate gene symbols. If the species
+is omitted or several entries match, `selection_required` is true and no entry
+is selected automatically. The default `reviewed_only=True` searches Swiss-Prot;
+set it to false to include unreviewed TrEMBL candidates. Up to five full entries
+are fetched, with explicit partial failures and pagination/truncation metadata.
+Missing FUNCTION annotations stay missing. Features, GO annotations and citations
+are each capped at 100 with separate truncation flags. Existing `uniprot_entry`
+still returns the full record for a known accession.
+
 Mapping is asynchronous: submit IDs, check the returned job ID, then fetch a
 bounded result page. Failed mappings and pagination links are preserved. Database
 codes follow the [official ID mapping configuration](https://rest.uniprot.org/configure/idmapping/fields).

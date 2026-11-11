@@ -1,6 +1,8 @@
 """UniProtKB search, annotated records, sequences and asynchronous ID mapping."""
 from __future__ import annotations
 
+import asyncio
+
 from mcp.server.fastmcp import FastMCP
 
 from common.http import bounded, get_json, identifier, identifiers, request, text
@@ -35,6 +37,115 @@ async def uniprot_entry(accession: str) -> dict:
     accession = _accession(accession)
     url = f"{BASE}/uniprotkb/{accession}.json"
     return {"record": await get_json(url), "source_url": url}
+
+
+def _function_summary(record: dict) -> dict:
+    """Keep curated claims, warnings and evidence together; never infer missing function."""
+    accession = record["primaryAccession"]
+    source_url = f"https://www.uniprot.org/uniprotkb/{accession}/entry"
+    comments = record.get("comments", [])
+    functions = [row for comment in comments if comment.get("commentType") == "FUNCTION"
+                 for row in comment.get("texts", [])]
+    cautions = [comment for comment in comments if comment.get("commentType") in {"CAUTION", "SEQUENCE CAUTION"}]
+    features = record.get("features", [])
+    go = [row for row in record.get("uniProtKBCrossReferences", []) if row.get("database") == "GO"]
+    # Attach citations to the actual statements/features, including contradictory phenotypes.
+    cited_pmids: set[str] = set()
+
+    def collect_evidence(value: object) -> None:
+        if isinstance(value, dict):
+            if value.get("source") == "PubMed" and value.get("id"):
+                cited_pmids.add(value["id"])
+            for item in value.values():
+                collect_evidence(item)
+        elif isinstance(value, list):
+            for item in value:
+                collect_evidence(item)
+
+    collect_evidence([comments, features[:100], go[:100]])
+    references = []
+    for reference in record.get("references", []):
+        citation = reference.get("citation", {})
+        ids = {row["database"]: row["id"] for row in citation.get("citationCrossReferences", [])}
+        pmid = ids.get("PubMed")
+        if pmid not in cited_pmids:
+            continue
+        references.append({"pmid": pmid, "doi": ids.get("DOI"), "title": citation.get("title"),
+                           "journal": citation.get("journal"), "year": citation.get("publicationDate"),
+                           "cited_for": reference.get("referencePositions", []),
+                           "source_url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/"})
+    protein = record.get("proteinDescription", {})
+    recommended = protein.get("recommendedName") or next(iter(protein.get("submissionNames", [])), {})
+    names = []
+    for gene in record.get("genes", []):
+        names.append({"primary": gene.get("geneName", {}).get("value"),
+                      "synonyms": [row["value"] for row in gene.get("synonyms", [])],
+                      "locus_names": [row["value"] for row in gene.get("orderedLocusNames", [])]})
+    return {"accession": accession, "entry_id": record.get("uniProtkbId"),
+            "protein_name": recommended.get("fullName", {}).get("value"),
+            "genes": names, "organism": record.get("organism"),
+            "reviewed": record.get("entryType") == "UniProtKB reviewed (Swiss-Prot)",
+            "length": record.get("sequence", {}).get("length"),
+            "protein_existence": record.get("proteinExistence"), "annotation_score": record.get("annotationScore"),
+            "functions": functions, "cautions": cautions,
+            "annotations": [c for c in comments if c.get("commentType") not in {"FUNCTION", "CAUTION", "SEQUENCE CAUTION"}],
+            "features": features[:100], "features_truncated": len(features) > 100,
+            "go_annotations": go[:100], "go_annotations_truncated": len(go) > 100,
+            "references": references[:100], "references_truncated": len(references) > 100,
+            "warnings": [] if functions else ["No FUNCTION annotation in UniProt; do not infer a function from the gene name"],
+            "source_url": source_url, "record_url": f"{BASE}/uniprotkb/{accession}.json"}
+
+
+@mcp.tool()
+async def uniprot_function(gene: str, taxon_id: int | None = None, reviewed_only: bool = True,
+                           limit: int = 5) -> dict:
+    """Find a gene's curated function, cautions, GO terms, features and supporting publications.
+
+    Example: gene="MYB52", taxon_id=3702 (Arabidopsis thaliana).
+    Uses exact gene-name/alias matching, then reads full UniProt entries so CAUTION
+    and contradictory phenotype evidence are preserved. taxon_id is the NCBI taxid.
+    Without an organism, return candidates and require species selection rather than
+    assuming human or combining ortholog functions. reviewed_only=False includes
+    unreviewed entries, whose claims may be predicted. At most five entries are read.
+    Original annotation language and evidence codes are retained for faithful summaries.
+    """
+    gene = identifier(gene, r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}", "gene symbol")
+    bounded(limit, 5)
+    if not isinstance(reviewed_only, bool):
+        raise ValueError("reviewed_only must be boolean")
+    clauses = [f'gene_exact:"{gene}"']
+    if taxon_id is not None:
+        clauses.append(f"organism_id:{bounded(taxon_id, 10_000_000, 'taxon_id')}")
+    if reviewed_only:
+        clauses.append("reviewed:true")
+    search = await uniprot_search(" AND ".join(clauses), limit=limit)
+    rows = search["results"][:limit]
+    total_value = search.get("total")
+    total = int(total_value) if total_value is not None and str(total_value).isdigit() else None
+    results = await asyncio.gather(*(uniprot_entry(row["primaryAccession"]) for row in rows),
+                                   return_exceptions=True)
+    entries, errors = [], []
+    for row, result in zip(rows, results):
+        if isinstance(result, Exception):
+            errors.append({"accession": row["primaryAccession"], "type": type(result).__name__,
+                           "message": "Full UniProt entry could not be retrieved"})
+        else:
+            entries.append(_function_summary(result["record"]))
+    truncated = bool(search.get("next_url")) or (total is not None and total > len(rows))
+    selection_required = bool(rows) and (taxon_id is None or len(rows) > 1 or truncated)
+    warnings = []
+    if taxon_id is None:
+        warnings.append("Organism unspecified; choose a species before attributing a function to the gene")
+    if not rows:
+        warnings.append("No matching entries; check gene/species or set reviewed_only=False to include unreviewed records")
+    elif selection_required:
+        warnings.append("Candidate entries are separate records; their functions must not be merged")
+    return {"gene": gene, "taxon_id": taxon_id, "reviewed_only": reviewed_only,
+            "query": " AND ".join(clauses), "total": total, "returned": len(entries),
+            "selection_required": selection_required,
+            "selected_accession": entries[0]["accession"] if len(entries) == 1 and not selection_required and not errors else None,
+            "entries": entries, "partial": bool(errors), "errors": errors, "warnings": warnings,
+            "truncated": truncated, "next_url": search.get("next_url"), "source_url": search["source_url"]}
 
 
 @mcp.tool()
