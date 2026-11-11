@@ -8,6 +8,29 @@ from tests.helpers import HTTPTestCase
 
 
 class GEOTests(HTTPTestCase):
+    async def test_geo_metadata_uses_sample_boundaries_with_unequal_and_missing_fields(self):
+        soft = ("^SERIES = GSE1\n!Series_title = Example\n"
+                "^SAMPLE = GSM1\n!Sample_geo_accession = GSM1\n!Sample_title = liver\n"
+                "!Sample_characteristics_ch1 = tissue: liver\n"
+                "^SAMPLE = GSM2\n!Sample_geo_accession = GSM2\n"
+                "!Sample_characteristics_ch1 = tissue: brain\n!Sample_characteristics_ch1 = donor: D2\n"
+                "^SAMPLE = GSM3\n!Sample_geo_accession = GSM3\n!Sample_title = heart\n"
+                "!Sample_organism_ch1 = Homo sapiens\n")
+        with self.mock_http(lambda req: httpx.Response(200, text=soft)):
+            result = await server.geo_metadata(["GSE1"])
+        self.assertEqual([r["characteristics"] for r in result["rows"]],
+                         ["tissue: liver", "tissue: brain; donor: D2", ""])
+        self.assertEqual([r["title"] for r in result["rows"]], ["liver", "", "heart"])
+        self.assertEqual(result["rows"][2]["organism"], "Homo sapiens")
+        import csv
+        import io
+        self.assertEqual(list(csv.DictReader(io.StringIO(result["csv"]))), result["rows"])
+
+    async def test_geo_metadata_rejects_conflicting_sample_marker(self):
+        with self.mock_http(lambda req: httpx.Response(200, text="^SAMPLE = GSM1\n!Sample_geo_accession = GSM2\n")):
+            with self.assertRaisesRegex(ValueError, "disagree"):
+                await server.geo_metadata(["GSE1"])
+
     async def test_search_summaries(self):
         with patch.object(server, "ncbi_search", AsyncMock(return_value={"ids": ["1"]})) as search, \
              patch.object(server, "ncbi_summary", AsyncMock(return_value={"result": {"1": {"accession": "GSE1"}}})):

@@ -42,3 +42,16 @@ class CNCBTests(HTTPTestCase):
         with self.mock_http(lambda req: httpx.Response(500)):
             with self.assertRaises(httpx.HTTPStatusError):
                 await server.cncb_search("rice")
+
+    async def test_business_errors_and_malformed_payloads_are_not_zero_hits(self):
+        payloads = [{"code": "500", "message": "Failed"}, {"code": "500", **_payload([]), "success": False},
+                    {"code": "200", "result": None}, {"code": "200", "result": {"data": {"data": "bad"}}},
+                    {"code": "200", "result": {"data": {"data": [], "recordsFiltered": -1}}}]
+        for payload in payloads:
+            with self.subTest(payload=payload), self.mock_http(lambda req: httpx.Response(200, json=payload)):
+                with self.assertRaises((ValueError, RuntimeError)):
+                    await server.cncb_search("rice")
+        with self.mock_http(lambda req: httpx.Response(200, json=_payload([]))):
+            result = await server.cncb_search("not found")
+        self.assertEqual(result["count"], 0)
+        self.assertEqual(result["records"], [])

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import httpx
+from urllib.parse import urlencode
 from mcp.server.fastmcp import FastMCP
 
-from common.http import identifier
+from common.http import bounded, get_json, identifier, text
+from common.cncb import search_payload
 
 mcp = FastMCP("cncb-ngdc")
 BASE = "https://ngdc.cncb.ac.cn/gwh/api/public"
@@ -44,8 +46,7 @@ async def _get(path: str):
 
 
 async def _get_url(url: str, params: dict | None = None):
-    async with httpx.AsyncClient(timeout=60) as c:
-        r = await c.get(url, params=params); r.raise_for_status(); return r.json()
+    return await get_json(url, params)
 
 
 @mcp.tool()
@@ -94,25 +95,19 @@ async def cncb_search(query: str, database: str = "gsa", limit: int = 10) -> dic
     or an accession such as PRJCA000126. Returns accessions (CRA runs,
     GWH genomes, PRJCA projects, SAMC samples), titles, types and record URLs.
     """
-    query = query.strip()
-    if not query or len(query) > 200:
-        raise ValueError("query must contain 1-200 characters")
+    query = text(query, maximum=200)
     database = database.strip().lower()
     if database not in SEARCHABLE_DATABASES:
         raise ValueError(f"Unsupported database {database!r}; choose from {sorted(SEARCHABLE_DATABASES)}")
-    limit = int(limit)
-    if not 1 <= limit <= 100:
-        raise ValueError("limit must be between 1 and 100")
+    bounded(limit)
     data = await _get_url(BIG_SEARCH, params={"db": database, "q": query,
                                               "start": 0, "length": limit})
-    payload = data.get("result", {}).get("data", {})
-    rows = payload.get("data", []) if isinstance(payload, dict) else []
+    rows, total = search_payload(data)
     records = [{"id": row.get("id"), "type": row.get("type"), "title": row.get("title"),
                 "url": row.get("url"), "db": row.get("dbId")} for row in rows]
-    total = payload.get("recordsFiltered", len(records)) if isinstance(payload, dict) else 0
     return {"query": query, "database": database, "count": total,
             "records": records, "returned": len(records),
-            "source_url": f"{NGDC}/search/specific?db={database}&q={query}"}
+            "source_url": f"{NGDC}/search/specific?" + urlencode({"db": database, "q": query})}
 
 
 @mcp.tool()

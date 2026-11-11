@@ -21,6 +21,9 @@ from urllib.parse import quote
 
 from common.http import bounded, identifier, identifiers, request, text
 from common.ena import RUN_FIELDS as ENA_RUN_FIELDS, files_from_record
+from common.geo import soft_samples
+from common.cncb import search_payload
+from common.sample_matching import condition_query_terms, tissue_query_terms
 from common.discovery import (Filters, filters as discovery_filters, assess, pair_candidates,
                               ena_query, ena_literal, platform_clause)
 
@@ -584,13 +587,10 @@ async def _gsa_section(organism: str, data_type: str, condition: str, limit: int
     query = " ".join(words)
     response = await request("GET", GSA_BIG_SEARCH,
                              params={"db": "gsa", "q": query, "start": offset, "length": limit})
-    payload = response.json().get("result", {}).get("data")
-    if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
-        raise ValueError("GSA returned an invalid search response")
-    rows = payload["data"]
+    rows, total = search_payload(response.json())
     records = [{"id": row.get("id"), "type": row.get("type"), "title": row.get("title"),
                 "url": row.get("url")} for row in rows]
-    return {"query": query, "count": int(payload.get("recordsFiltered", len(records))), "returned": len(records),
+    return {"query": query, "count": total, "returned": len(records),
             "records": records, "source_url": GSA_BIG_SEARCH.split("/api")[0] +
             f"/specific?db=gsa&q={quote_plus(query)}"}
 
@@ -648,7 +648,10 @@ def _summary_candidates(name: str, section: dict, f: Filters) -> list[dict]:
 
 
 async def _entrez_section(name: str, f: Filters, entry_type: str, limit: int) -> dict:
-    clauses = [_free_text_clause(value) for value in (f.condition, f.tissue) if value]
+    clauses = []
+    for value, expand in ((f.condition, condition_query_terms), (f.tissue, tissue_query_terms)):
+        if value:
+            clauses.append("(" + " OR ".join(_free_text_clause(term) for term in expand(value)) + ")")
     if name == "geo":
         if f.organism:
             clauses.append(_organism_clause(f.organism))
@@ -980,35 +983,22 @@ async def geo_metadata(accessions: list[str], limit: int = 500) -> dict[str, Any
         response = await request("GET", "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi",
                                  params={"acc": accession, "targ": "gsm",
                                          "form": "text", "view": "full"})
-        # Full SOFT groups values by field: each !Sample_x line repeats once per
-        # sample. Collect per-field value lists, then zip by index per sample.
-        fields: dict[str, list[str]] = {}
-        for line in response.text.splitlines():
-            if line.startswith("!") and " = " in line:
-                key, value = line[1:].split(" = ", 1)
-                fields.setdefault(key, []).append(value)
-        accessions_list = fields.get("Sample_geo_accession", [])
-        if not accessions_list:
-            raise ValueError(f"No sample metadata returned for {accession}")
-
-        def value_of(key: str, index: int) -> str:
-            values = fields.get(key, [])
-            return values[index] if index < len(values) else ""
-
-        for index, sample in enumerate(accessions_list):
-            chars = fields.get("Sample_characteristics_ch1", [])
-            per_sample = (len(chars) + len(accessions_list) - 1) // len(accessions_list)
+        found = False
+        for fields in soft_samples(response.text):
+            found = True
             rows.append({
                 "series": accession,
-                "sample": sample,
-                "title": value_of("Sample_title", index),
-                "source": value_of("Sample_source_name_ch1", index),
-                "organism": value_of("Sample_organism_ch1", index),
-                "molecule": value_of("Sample_molecule_ch1", index),
-                "characteristics": "; ".join(chars[index * per_sample:(index + 1) * per_sample]),
+                "sample": _geo_accession(fields["Sample_geo_accession"][0]),
+                "title": "; ".join(fields.get("Sample_title", [])),
+                "source": "; ".join(fields.get("Sample_source_name_ch1", [])),
+                "organism": "; ".join(fields.get("Sample_organism_ch1", [])),
+                "molecule": "; ".join(fields.get("Sample_molecule_ch1", [])),
+                "characteristics": "; ".join(fields.get("Sample_characteristics_ch1", [])),
             })
             if len(rows) >= limit:
                 break
+        if not found:
+            raise ValueError(f"No sample metadata returned for {accession}")
         if len(rows) >= limit:
             break
     buffer = io.StringIO()

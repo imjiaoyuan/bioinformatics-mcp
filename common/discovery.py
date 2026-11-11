@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 import re
 
 from common.http import bounded, text
+from common.sample_matching import condition_query_terms, match_condition, match_tissue, tissue_query_terms
 
 PLATFORMS = {"illumina": "ILLUMINA", "bgiseq": "BGISEQ", "dnbseq": "DNBSEQ",
              "pacbio": "PACBIO_SMRT", "ont": "OXFORD_NANOPORE"}
@@ -156,9 +157,10 @@ def ena_query(f: Filters, taxid: str | None, tree: bool = False) -> str:
         clauses.append("(" + " OR ".join(f'instrument_platform="{p}"' for p in platforms) + ")")
     searchable = ("sample_title", "sample_description", "experiment_title", "study_title")
     if f.tissue:
-        clauses.append(ena_text(f.tissue, ("tissue_type", *searchable)))
+        clauses.append("(" + " OR ".join(ena_text(term, ("tissue_type", *searchable))
+                                          for term in tissue_query_terms(f.tissue)) + ")")
     if f.condition:
-        clauses.append(ena_text(f.condition, searchable))
+        clauses.append("(" + " OR ".join(ena_text(term, searchable) for term in condition_query_terms(f.condition)) + ")")
     if f.sample_scope in {"single_cell", "single_nucleus"}:
         terms = (("single cell", "single-cell", "scRNA", "10x", "Smart-seq") if f.sample_scope == "single_cell"
                  else ("single nucleus", "single-nucleus", "single nuclei", "snRNA"))
@@ -177,10 +179,6 @@ def ena_query(f: Filters, taxid: str | None, tree: bool = False) -> str:
     if f.assay in {"atac", "proteomics", "epigenomic"}:
         clauses.append(ena_text({"atac": "ATAC", "proteomics": "proteom", "epigenomic": "epigen"}[f.assay], searchable))
     return " AND ".join(clauses)
-
-
-def _contains(value: str, needle: str) -> bool:
-    return bool(re.search(r"(?<![^\W_])" + re.escape(needle) + r"(?![^\W_])", value, re.I))
 
 
 def assess(candidate: dict, f: Filters) -> dict:
@@ -227,15 +225,8 @@ def assess(candidate: dict, f: Filters) -> dict:
     for name, wanted in (("tissue", f.tissue), ("condition", f.condition)):
         if not wanted:
             continue
-        relevant = (r"tissue|organ|body.?site|source.?name" if name == "tissue" else
-                    r"condition|disease|treatment|phenotype|health|description")
-        attributes = [k for k in candidate.get("attribute_fields", []) if re.search(relevant, k, re.I)]
-        observed = ["tissue_type", "sample_title", "sample_description", *attributes]
-        matched = [k for k in observed if _contains(str(metadata.get(k) or ""), wanted)]
-        status = "match" if matched else "unknown"
-        if name == "tissue" and metadata.get("tissue_type") and not _contains(metadata["tissue_type"], wanted):
-            status = "mismatch"
-        check(name, status, matched or ["tissue_type"], "Sample-level evidence required; project keywords alone are insufficient")
+        status, observed, reason = (match_tissue(metadata, wanted) if name == "tissue" else match_condition(metadata, wanted))
+        check(name, status, observed, reason)
     if f.protocol != "any":
         roles = {entry["role"] for entry in candidate.get("files", [])}
         matched = bool(re.search(PROTOCOL_PATTERNS[f.protocol], description, re.I))

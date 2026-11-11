@@ -20,6 +20,21 @@ def run(accession="SRR1", platform="PACBIO_SMRT", **extra):
 
 
 class DiscoveryTests(HTTPTestCase):
+    async def test_brain_search_expands_to_cortex_and_uses_specimen_annotations(self):
+        def handler(req):
+            self.assertIn('"*cerebral cortex*"', req.url.params["query"])
+            return httpx.Response(200, json=[run(tissue_type="cerebral cortex")])
+        with self.mock_http(handler):
+            result = await server.find_data(assay="rna_seq", tissue="brain", archives="ena", metadata_limit=0)
+        self.assertEqual(result["candidate_counts"]["match"], 1)
+        self.assertEqual(result["candidates"][0]["criteria"]["tissue"]["status"], "match")
+
+    async def test_gsa_business_error_is_a_source_failure(self):
+        with self.mock_http(lambda req: httpx.Response(200, json={"code": "500", "message": "failed"})):
+            result = await server.find_data(assay="rna_seq", archives="gsa")
+        self.assertTrue(result["all_sources_failed"])
+        self.assertEqual(result["gsa"]["status"], "error")
+
     async def test_each_archive_subset_retains_correct_source(self):
         """All 15 subsets cover the original positional task/result misalignment."""
         import itertools
