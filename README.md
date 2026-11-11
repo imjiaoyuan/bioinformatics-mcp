@@ -289,6 +289,15 @@ and source-linked evidence. Contradictory records appear in `excluded_candidates
 records missing evidence stay in `candidates` with explicit `uncertainties`. These
 are metadata assessments, not measurements of read quality or experimental suitability.
 
+Tissue matching uses a small, explicit anatomical vocabulary and parent relationships:
+for example `brain` includes cerebral cortex, hippocampus and cerebellum, while a
+request for cerebral cortex is not established by a broad `brain` annotation. Search
+queries expand the supported descendant names too. Structured tissue and disease/
+health attributes take precedence over sample prose. Comparison text such as "tumor
+sample compared with healthy controls" does not establish a healthy specimen.
+Conflicting annotations and unmapped anatomy remain `unknown`; this is not a complete
+anatomical ontology or a general natural-language classifier.
+
 ENA provides the most detailed assessment, including original submitted files as
 well as generated FASTQs. PacBio platform alone and CCS naming alone do not prove
 HiFi quality. File roles are filename hints, not inspected read contents. If metadata
@@ -318,9 +327,23 @@ Truncation, enrichment limits and unavailable metadata are reported. Pagination 
 bounded and searches are not exhaustive; files are not downloaded or checksum-verified.
 The download planner also supports GEO-only and SRA-only inputs, deduplicates URLs,
 and reports source errors, unknown sizes and possible truncation.
+GEO sample metadata is parsed by SOFT sample boundaries, preserving repeated and
+missing fields per sample. CNCB/GSA business failures and malformed payloads raise
+explicit errors rather than masquerading as zero hits.
 
 The queries and fields follow the official [ENA advanced-search API](https://ena-docs.readthedocs.io/en/latest/retrieval/programmatic-access/advanced-search.html)
 and [taxonomy API](https://ena-docs.readthedocs.io/en/latest/retrieval/programmatic-access/taxon-api.html).
+
+### Related publications
+
+`publication_related(doi, limit)` resolves OpenAlex work IDs using the `/works/{id}`
+endpoint. It returns an object with `articles`, `errors`, `partial`,
+`all_requests_failed`, `total_related` and `truncated`, plus the source URL.
+This replaces its previous bare article list: callers should read `articles`.
+Individual retrieval failures retain successful articles and report the failed
+IDs; an empty related-work list is distinguished from failure of every request.
+An initial DOI lookup failure is an explicit tool error. Public queries use the
+shared bounded transport with rate limiting and transient-error retry.
 
 ### ENA
 
@@ -513,6 +536,15 @@ generic NCBI tools and the ENA server, which remain the preferred route for
 FASTQ-level metadata. `clinvar-mcp` searches variant clinical significance and
 resolves RCV records through E-utilities (database `clinvar`). Both require
 `NCBI_EMAIL`; `NCBI_API_KEY` stays optional.
+Both servers translate `limit`/`offset` into Entrez `retmax`/`retstart` and report
+upstream experiment/variant paging. SRA study grouping covers only the experiment
+page returned; `total_kind="studies_in_this_page"` makes that distinction explicit.
+SRA experiment XML can contain sibling elements as well as a single Summary node.
+
+The shared HTTP transport removes API-key, access-key, token and contact-email
+query parameters from returned request URLs, HTTP errors and HTTP client logs,
+while still sending the original parameters to the provider. SRA/ClinVar JSON
+and XML source links, and shared BioGRID response links, use the same redaction.
 
 ### GTEx, HPA, AlphaFold DB, EMDB and KEGG
 

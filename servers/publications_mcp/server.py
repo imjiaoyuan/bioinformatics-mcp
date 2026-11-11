@@ -1,11 +1,13 @@
 from __future__ import annotations
+import asyncio
 import os
 import re
+from urllib.parse import urlsplit
 
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-from common.http import bounded, identifier, text
+from common.http import bounded, identifier, request, text
 
 mcp = FastMCP("publications")
 CROSSREF = "https://api.crossref.org"
@@ -28,9 +30,9 @@ def _year(value: int, name: str) -> int:
 
 
 async def _get(url: str, params: dict | None = None) -> dict:
-    headers = {"User-Agent": "bioinformatics-mcp/0.1 (mailto:" + os.getenv("NCBI_EMAIL", "") + ")"}
-    async with httpx.AsyncClient(timeout=60, headers=headers, follow_redirects=True) as c:
-        r = await c.get(url, params=params); r.raise_for_status(); return r.json()
+    contact = os.getenv("NCBI_EMAIL")
+    agent = "bioinformatics-mcp/0.1" + (f" (mailto:{contact})" if contact else "")
+    return (await request("GET", url, params=params, headers={"User-Agent": agent})).json()
 
 
 def _clean(item: dict) -> dict:
@@ -70,18 +72,45 @@ async def publication_by_doi(doi: str) -> dict:
     return _clean((await _get(f"{CROSSREF}/works/{_doi(doi)}"))["message"])
 
 @mcp.tool()
-async def publication_related(doi: str, limit: int = 20) -> list[dict]:
-    """Find related works using OpenAlex concepts and citation graph."""
+async def publication_related(doi: str, limit: int = 20) -> dict:
+    """Find related OpenAlex works; distinguish empty results from partial/failed retrievals.
+
+    Returns articles, errors, partial, and truncation metadata. Individual failures
+    do not discard successful records. No abstract/full-text similarity is inferred.
+    """
     doi = _doi(doi)
     limit = bounded(limit, 50)
     data = await _get(f"{OPENALEX}/works/https://doi.org/{doi}")
-    ids = data.get("related_works", [])[:limit]
-    results = []
-    for wid in ids:
-        try:
-            x = await _get(f"{OPENALEX}/{wid}"); results.append({"title": x.get("title"), "doi": x.get("doi"), "year": x.get("publication_year"), "url": x.get("id")})
-        except httpx.HTTPError: continue
-    return results
+    related = data.get("related_works")
+    if not isinstance(related, list) or any(not isinstance(wid, str) for wid in related):
+        raise ValueError("OpenAlex returned no valid related_works list")
+    related = list(dict.fromkeys(related))
+    ids = related[:limit]
+
+    async def fetch_work(value: str) -> dict:
+        if not isinstance(value, str):
+            raise ValueError("Invalid OpenAlex work ID")
+        parsed = urlsplit(value)
+        if parsed.scheme and (parsed.scheme != "https" or parsed.netloc not in {"openalex.org", "api.openalex.org"}):
+            raise ValueError("Invalid OpenAlex work URL")
+        wid = identifier(parsed.path.rstrip("/").rsplit("/", 1)[-1], r"W[1-9][0-9]*", "OpenAlex work ID")
+        x = await _get(f"{OPENALEX}/works/{wid}")
+        return {"title": x.get("title"), "doi": x.get("doi"), "year": x.get("publication_year"),
+                "url": x.get("id") or f"https://openalex.org/{wid}"}
+
+    records = await asyncio.gather(*(fetch_work(wid) for wid in ids), return_exceptions=True)
+    articles, errors = [], []
+    for wid, result in zip(ids, records):
+        if isinstance(result, Exception):
+            error = {"id": wid, "type": type(result).__name__, "message": "Related work retrieval failed"}
+            if isinstance(result, httpx.HTTPStatusError):
+                error["status_code"] = result.response.status_code
+            errors.append(error)
+        else:
+            articles.append(result)
+    return {"doi": doi, "articles": articles, "returned": len(articles), "total_related": len(related),
+            "errors": errors, "partial": bool(errors), "all_requests_failed": bool(ids) and len(errors) == len(ids),
+            "truncated": len(related) > len(ids), "source_url": f"{OPENALEX}/works/https://doi.org/{doi}"}
 
 @mcp.tool()
 async def publication_europepmc(query: str, limit: int = 20) -> dict:
