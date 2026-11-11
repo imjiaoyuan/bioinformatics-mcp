@@ -6,11 +6,11 @@ from urllib.parse import urlencode
 from mcp.server.fastmcp import FastMCP
 
 from common.http import bounded, get_json, identifier, request, text
+from common.ena import RUN_FIELDS, files_from_record
 
 mcp = FastMCP("ena")
 BASE = "https://www.ebi.ac.uk/ena/portal/api"
 RESULTS = {"read_run", "read_study", "read_experiment", "sample", "study", "assembly"}
-RUN_FIELDS = "run_accession,study_accession,sample_accession,scientific_name,library_strategy,library_layout,fastq_ftp,fastq_md5,fastq_bytes"
 
 
 def _result(result: str) -> str:
@@ -53,15 +53,11 @@ async def ena_fastq(accession: str, limit: int = 20) -> dict:
     runs = []
     for record in records[:limit]:
         row = dict(record)
-        paths = (row.get("fastq_ftp") or "").split(";")
-        checksums = (row.get("fastq_md5") or "").split(";")
-        sizes = (row.get("fastq_bytes") or "").split(";")
-        row["files"] = [{"url": path if path.startswith("https://") else "https://" + path.removeprefix("ftp://"),
-                         "md5": checksums[i] if i < len(checksums) else None,
-                         "bytes": int(sizes[i]) if i < len(sizes) and sizes[i].isdigit() else None}
-                        for i, path in enumerate(paths) if path]
+        parsed, warnings = files_from_record(row, submitted=False)
+        row["files"] = [{key: entry[key] for key in ("url", "md5", "bytes")} for entry in parsed]
+        row["warnings"] = warnings
         runs.append(row)
-    return {"accession": accession, "runs": runs,
+    return {"accession": accession, "runs": runs, "truncated": len(records) >= limit,
             "source_url": f"{BASE}/filereport?{urlencode(params)}"}
 
 

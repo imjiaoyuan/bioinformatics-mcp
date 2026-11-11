@@ -204,11 +204,123 @@ returned edges locally; it does not expand the input protein set.
 
 ### GEO (included in ncbi-mcp)
 
-`geo_search` searches GEO summaries, `geo_record` reads GSE/GSM SOFT metadata
-(including sample characteristics), and `geo_files` lists actual matrix and
-supplement URLs. File contents are not downloaded. Entrez `gds` and `geoprofiles`
-are also available through the generic NCBI tools. Entrez calls require
-`NCBI_EMAIL`; `NCBI_API_KEY` remains optional. [Official GEO access guide](https://www.ncbi.nlm.nih.gov/geo/info/geo_paccess.html).
+`geo_search` searches GEO with structured biology filters — `organism`
+("human", "arabidopsis", any scientific name), `data_type` (wgs, rna_seq,
+long_reads, hifi, ont, scrna, snrna, spatial, atac, chip_seq, methylome,
+proteomics, epigenomic), and `entry_type` (series/sample/platform).
+`geo_record` reads GSE/GSM SOFT metadata (including sample characteristics),
+and `geo_files` lists actual matrix and supplement URLs. File contents are not
+downloaded. `sra_search` finds raw reads in SRA with exact fields (organism
+taxid, library `strategy`, sequencing `platform`, library `source`), and
+`sra_files` expands run, experiment, study, or sample accessions into runs
+with public HTTPS download URLs, platform/strategy metadata, spot/base
+counts, and sizes (no download is started; FASTQ needs the ENA mirror).
+`find_data` is the one-call entry point: it searches GEO, SRA, ENA and CNCB
+GSA in parallel (selectable via `archives`) and returns sections tagged by
+source. Each source can fail independently: successful results are retained,
+with `errors`, `partial`, and `all_sources_failed` distinguishing failures
+from an empty search. `download_plan` turns a mixed list of GSE/GSM and SRA accessions into
+a batch download manifest with known sizes plus ready-to-save aria2c/wget
+inputs, and `geo_metadata` harvests sample-level SOFT characteristics
+(treatment, tissue, variety) for a list of GSEs and returns rows plus an
+Excel-ready CSV. Entrez `gds` and `geoprofiles` are also available through
+the generic NCBI
+tools. Entrez calls require `NCBI_EMAIL`; `NCBI_API_KEY` remains optional.
+[Official GEO access guide](https://www.ncbi.nlm.nih.gov/geo/info/geo_paccess.html).
+
+#### Structured data discovery
+
+Use independent `find_data` filters to express biological requirements separately
+from sequencing technology. For example, human liver short- and long-read RNA
+data with verified specimen identity:
+
+```json
+{
+  "organism": "human",
+  "assay": "rna_seq",
+  "tissue": "liver",
+  "read_type": "both",
+  "pairing": "same_sample",
+  "archives": "ena",
+  "limit": 10,
+  "metadata_limit": 10
+}
+```
+
+Poplar genomic HiFi candidates (the `poplar`/`杨树` alias searches the entire
+*Populus* genus; use a scientific species name for a narrower search):
+
+```json
+{
+  "organism": "poplar",
+  "assay": "wgs",
+  "protocol": "hifi",
+  "archives": "ena,gsa",
+  "file_format": "bam",
+  "limit": 10
+}
+```
+
+| Filter | Values / meaning |
+| --- | --- |
+| `assay` | `rna_seq`, `wgs`, `wes`, `scrna`, `snrna`, `spatial`, `atac`, `chip_seq`, `methylome`, `proteomics`, `epigenomic` |
+| `tissue`, `condition` | Separate literal terms; sample metadata supplies evidence, while study-title matches alone remain unverified |
+| `platforms` | List of `illumina`, `bgiseq`, `dnbseq`, `pacbio`, `ont` |
+| `read_type` | `any`, `short`, `long`, `both` |
+| `protocol` | `any`, `hifi`, `iso_seq`, `direct_rna`, `direct_cdna`, `pcr_cdna` |
+| `sample_scope` | `any`, `bulk`, `single_cell`, `single_nucleus` |
+| `sample_type` | `any`, `tissue`, `cell_line`, `organoid` |
+| `pairing` | `any`, `same_sample`, `same_donor`; pairs require both short and long reads |
+| `file_format` | `any`, `fastq`, `bam`, `cram`, `sra`, `h5`; reports presence, not completeness |
+| `include_descendants` | Include descendant taxa in ENA; genus aliases always include descendants |
+| `offset` | Page start, 0–100000; follow per-source/per-technology `next_offset` |
+| `metadata_limit` | Maximum unique ENA samples enriched from XML per call, 0–20 |
+
+Legacy `data_type` calls remain supported. `long_reads` and `ont` default to
+transcriptomic data; use `assay="wgs", read_type="long"` for genomic long reads.
+The independent filters reject contradictory combinations before searching.
+For `read_type="both"`, the long-read `protocol` applies only to long-read members.
+
+The response retains archive sections and adds `candidates`, `excluded_candidates`,
+`candidate_counts`, and `pair_groups`. Each candidate has study/sample/run identifiers,
+observed metadata, file URLs/formats/roles/sizes/checksums where available, and a
+`criteria` map. Each criterion reports `match`, `unknown`, or `mismatch`, a reason,
+and source-linked evidence. Contradictory records appear in `excluded_candidates`;
+records missing evidence stay in `candidates` with explicit `uncertainties`. These
+are metadata assessments, not measurements of read quality or experimental suitability.
+
+ENA provides the most detailed assessment, including original submitted files as
+well as generated FASTQs. PacBio platform alone and CCS naming alone do not prove
+HiFi quality. File roles are filename hints, not inspected read contents. If metadata
+explicitly reports HiFi but ENA file names say `subreads`, the protocol evidence is
+retained and `read_representation` remains unknown until read headers/quality are
+checked. An unannotated subreads file alone cannot establish HiFi.
+RNA searches retain `OTHER`/`AMPLICON` strategies for protocol inspection and exclude
+known miRNA/ncRNA strategies from bulk/full-length RNA candidates.
+
+GEO/SRA summaries and GSA keyword hits may lack specimen/protocol/file evidence;
+they remain unverified rather than inheriting the user's requested conditions.
+GSA experiment/run/file expansion and ENCODE integration are not implemented here.
+ENA-only searches do not require `NCBI_EMAIL`. If NCBI credentials are absent,
+default multi-archive calls report GEO/SRA errors while continuing ENA/GSA.
+
+Pairing uses an explicit sample/BioSample accession or a donor identifier from
+sample XML. Donor identifiers are scoped to their study to avoid collisions.
+Sharing an organism, tissue, project or sample title is insufficient. A pair's
+`identity_verified` confirms its identifier relationship; `status` still reflects
+any unknown biological/technical criteria. Missing pairs mean none were confirmed
+in this result window, not that none exist in the archive.
+
+`limit` caps each archive query (1–100). ENA `read_type="both"` searches separate
+short/long windows, each capped at `limit`, so it can return up to `2 × limit` runs.
+Counts are labelled as returned runs or archive records, never biological samples.
+Truncation, enrichment limits and unavailable metadata are reported. Pagination is
+bounded and searches are not exhaustive; files are not downloaded or checksum-verified.
+The download planner also supports GEO-only and SRA-only inputs, deduplicates URLs,
+and reports source errors, unknown sizes and possible truncation.
+
+The queries and fields follow the official [ENA advanced-search API](https://ena-docs.readthedocs.io/en/latest/retrieval/programmatic-access/advanced-search.html)
+and [taxonomy API](https://ena-docs.readthedocs.io/en/latest/retrieval/programmatic-access/taxon-api.html).
 
 ### ENA
 

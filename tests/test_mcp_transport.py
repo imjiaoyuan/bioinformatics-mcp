@@ -31,7 +31,7 @@ SERVERS = {
     "gprofiler": (3, "gprofiler_enrichment", {}),
     "gwas": (5, "gwas_traits", {}),
     "interpro": (4, "interpro_search", {}),
-    "ncbi": (9, "ncbi_search", {}),
+    "ncbi": (14, "ncbi_search", {}),
     "opentargets": (6, "opentargets_search", {}),
     "pdb": (3, "pdb_entry", {}),
     "publications": (4, "publication_search", {}),
