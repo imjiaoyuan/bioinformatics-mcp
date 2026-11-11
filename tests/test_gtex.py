@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.gtex_mcp import server
+from servers.gtex_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -51,33 +51,33 @@ class GtexTests(HTTPTestCase):
                                                        "qValue": 0.0}],
                                            "paging_info": {"totalNumberOfItems": 1}})
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            self.assertEqual((await server.gtex_service_info())["version"], "2.0.0")
-            tissue = (await server.gtex_tissue_list(limit=10, page=1))["data"][0]
+            self.assertEqual((await api.gtex_service_info())["version"], "2.0.0")
+            tissue = (await api.gtex_tissue_list(limit=10, page=1))["data"][0]
             self.assertEqual(tissue["ontologyId"], "UBERON:0002037")
-            gene = (await server.gtex_gene_search("ACTN2"))["data"][0]
+            gene = (await api.gtex_gene_search("ACTN2"))["data"][0]
             self.assertEqual(gene["gencodeId"], "ENSG00000077522.12")
             self.assertEqual(gene["genomeBuild"], "GRCh38/hg38")
-            median = (await server.gtex_median_gene_expression("ENSG00000077522.12"))["data"][0]
+            median = (await api.gtex_median_gene_expression("ENSG00000077522.12"))["data"][0]
             self.assertEqual(median["unit"], "TPM")
-            per_sample = (await server.gtex_gene_expression("ENSG00000077522.12", "Brain_Cerebellum",
+            per_sample = (await api.gtex_gene_expression("ENSG00000077522.12", "Brain_Cerebellum",
                                                             dataset_id="gtex_v11"))["data"][0]
             self.assertEqual(per_sample["sampleId"], "GTEX-1117F")
-            eqtl = (await server.gtex_eqtl(gencode_id="ENSG00000077522.12",
+            eqtl = (await api.gtex_eqtl(gencode_id="ENSG00000077522.12",
                                            variant_id="chr1_236686454_G_A_b38"))["data"][0]
             self.assertLess(eqtl["pValue"], 0.05)
         self.assertIn("dataset/tissueSiteDetail", paths[1][0])
 
     async def test_validation_all_tools(self):
-        cases = [(server.gtex_tissue_list, {"limit": 0}), (server.gtex_tissue_list, {"page": -1}),
-                 (server.gtex_gene_search, {"gene": "  "}),
-                 (server.gtex_median_gene_expression, {"gencode_id": "ACTN2; drop"}),
-                 (server.gtex_median_gene_expression, {"gencode_id": "ENSG00000077522.12", "dataset_id": "v9"}),
-                 (server.gtex_median_gene_expression, {"gencode_id": "ENSG00000077522.12", "tissue_id": "brain!"}),
-                 (server.gtex_gene_expression, {"gencode_id": "ENSG00000077522.12", "tissue_id": "bad tissue"}),
-                 (server.gtex_gene_expression, {"gencode_id": "ENSG00000077522.12", "tissue_id": "Brain_Cerebellum",
+        cases = [(api.gtex_tissue_list, {"limit": 0}), (api.gtex_tissue_list, {"page": -1}),
+                 (api.gtex_gene_search, {"gene": "  "}),
+                 (api.gtex_median_gene_expression, {"gencode_id": "ACTN2; drop"}),
+                 (api.gtex_median_gene_expression, {"gencode_id": "ENSG00000077522.12", "dataset_id": "v9"}),
+                 (api.gtex_median_gene_expression, {"gencode_id": "ENSG00000077522.12", "tissue_id": "brain!"}),
+                 (api.gtex_gene_expression, {"gencode_id": "ENSG00000077522.12", "tissue_id": "bad tissue"}),
+                 (api.gtex_gene_expression, {"gencode_id": "ENSG00000077522.12", "tissue_id": "Brain_Cerebellum",
                                                 "dataset_id": "gtex_v7"}),
-                 (server.gtex_eqtl, {}), (server.gtex_eqtl, {"tissue_id": "", "gencode_id": "x"}),
-                 (server.gtex_eqtl, {"gencode_id": "ENSG00000077522.12", "limit": 101})]
+                 (api.gtex_eqtl, {}), (api.gtex_eqtl, {"tissue_id": "", "gencode_id": "x"}),
+                 (api.gtex_eqtl, {"gencode_id": "ENSG00000077522.12", "limit": 101})]
         for func, args in cases:
             with self.subTest(tool=func.__name__, args=args), self.assertRaises(ValueError):
                 await func(**args)
@@ -85,4 +85,4 @@ class GtexTests(HTTPTestCase):
     async def test_api_error(self):
         with self.mock_http(lambda req: httpx.Response(404)):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.gtex_median_gene_expression("ENSG99999999999.1")
+                await api.gtex_median_gene_expression("ENSG99999999999.1")

@@ -1,9 +1,9 @@
-"""Mocked tests for the IntAct MCP server."""
+"""Mocked tests for the IntAct MCP api."""
 from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.intact_mcp import server
+from servers.intact_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -34,17 +34,17 @@ class IntActTests(HTTPTestCase):
                                                           "idB": "P53762 (uniprotkb)"}], "totalElements": 55})
 
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            search = await server.intact_interaction_search("brca1", limit=10, offset=5)
+            search = await api.intact_interaction_search("brca1", limit=10, offset=5)
             self.assertEqual(search["content"][0]["idA"], "Q61221-1 (uniprotkb)")
             self.assertEqual(search["totalElements"], 55)
             self.assertIn("source_url", search)
-            interactor = (await server.intact_interactor_search("p53", limit=10, offset=5))["content"][0]
+            interactor = (await api.intact_interactor_search("p53", limit=10, offset=5))["content"][0]
             self.assertEqual(interactor["interactorPreferredIdentifier"], "P04637")
-            details = await server.intact_interaction_details("ebi-4486632")
+            details = await api.intact_interaction_details("ebi-4486632")
             self.assertEqual(details["interaction"]["intactMiscore"], 0.37)
             self.assertEqual(details["interaction"]["detectionMethodMIIdentifier"], "MI:0397")
             self.assertEqual(details["interaction"]["experimentalRoleB"], "prey")
-            pub = (await server.intact_publication_interactions("11430896"))["content"][0]
+            pub = (await api.intact_publication_interactions("11430896"))["content"][0]
             self.assertEqual(pub["ac"], "EBI-10095907")
         self.assertIn("/intact/ws/interaction/findInteractions/EBI-4486632", paths)
 
@@ -52,19 +52,19 @@ class IntActTests(HTTPTestCase):
         with self.mock_http(lambda req: httpx.Response(200, json={"content": [], "totalElements": 0})), \
                 patch("common.http.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaises(ValueError):
-                await server.intact_interaction_details("EBI-1")
+                await api.intact_interaction_details("EBI-1")
 
     async def test_validation_all_tools(self):
-        for func, args in [(server.intact_interaction_search, {"query": ""}),
-                           (server.intact_interactor_search, {"query": "a b\nc"}),
-                           (server.intact_interaction_details, {"interaction_ac": "bad ac"}),
-                           (server.intact_interaction_details, {"interaction_ac": "Q04637"}),
-                           (server.intact_publication_interactions, {"pubmed_id": "abc"}),
-                           (server.intact_publication_interactions, {"pubmed_id": "11430896", "limit": 101})]:
+        for func, args in [(api.intact_interaction_search, {"query": ""}),
+                           (api.intact_interactor_search, {"query": "a b\nc"}),
+                           (api.intact_interaction_details, {"interaction_ac": "bad ac"}),
+                           (api.intact_interaction_details, {"interaction_ac": "Q04637"}),
+                           (api.intact_publication_interactions, {"pubmed_id": "abc"}),
+                           (api.intact_publication_interactions, {"pubmed_id": "11430896", "limit": 101})]:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**args)
 
     async def test_api_error(self):
         with self.mock_http(lambda req: httpx.Response(404)):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.intact_interaction_search("../bad")
+                await api.intact_interaction_search("../bad")

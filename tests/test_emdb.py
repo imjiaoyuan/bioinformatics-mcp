@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.emdb_mcp import server
+from servers.emdb_mcp import api
 from tests.helpers import HTTPTestCase
 
 ENTRY = {
@@ -53,10 +53,10 @@ class EMDBTests(HTTPTestCase):
                 return httpx.Response(200, json=[ENTRY])
             return httpx.Response(200, json=ENTRY)
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            entry = await server.emdb_entry("emd-11605")
-            resolution = await server.emdb_resolution("EMD-11605")
-            maps = await server.emdb_map_files("EMD-11605")
-            search = await server.emdb_search('title:"apoferritin"', limit=10)
+            entry = await api.emdb_entry("emd-11605")
+            resolution = await api.emdb_resolution("EMD-11605")
+            maps = await api.emdb_map_files("EMD-11605")
+            search = await api.emdb_search('title:"apoferritin"', limit=10)
         self.assertEqual(entry["emdb_id"], "EMD-11605")
         self.assertEqual(entry["status"], "REL")
         self.assertEqual(resolution["resolutions"][0]["resolution"], "29.6")
@@ -71,16 +71,16 @@ class EMDBTests(HTTPTestCase):
         self.assertIn("source_url", entry)
 
     async def test_validation_all_tools(self):
-        for func, args in [(server.emdb_entry, {"emdb_id": "11605"}),
-                           (server.emdb_resolution, {"emdb_id": "EMDbad"}),
-                           (server.emdb_map_files, {"emdb_id": "../EMD-11605"}),
-                           (server.emdb_search, {"query": ""}),
-                           (server.emdb_search, {"query": "x", "limit": 101}),
-                           (server.emdb_search, {"query": "x", "offset": -1})]:
+        for func, args in [(api.emdb_entry, {"emdb_id": "11605"}),
+                           (api.emdb_resolution, {"emdb_id": "EMDbad"}),
+                           (api.emdb_map_files, {"emdb_id": "../EMD-11605"}),
+                           (api.emdb_search, {"query": ""}),
+                           (api.emdb_search, {"query": "x", "limit": 101}),
+                           (api.emdb_search, {"query": "x", "offset": -1})]:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**args)
 
     async def test_api_error(self):
         with self.mock_http(lambda req: httpx.Response(404)):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.emdb_entry("EMD-99999999")
+                await api.emdb_entry("EMD-99999999")

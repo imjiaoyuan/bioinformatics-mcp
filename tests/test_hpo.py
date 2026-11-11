@@ -1,7 +1,7 @@
 import httpx
 from unittest.mock import AsyncMock, patch
 
-from servers.hpo_mcp import server
+from servers.hpo_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -38,34 +38,34 @@ class HPOTests(HTTPTestCase):
             raise AssertionError(path)
 
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            search = await server.hpo_search("arachnodactyly", limit=1, page=2)
+            search = await api.hpo_search("arachnodactyly", limit=1, page=2)
             self.assertEqual(search["source_url"], "https://ontology.jax.org/api/hp/search?q=arachnodactyly&page=2&limit=1")
             self.assertEqual(search["terms"][0]["id"], "HP:0001166")
             self.assertEqual(search["totalCount"], 5)
-            term = await server.hpo_term("hp:0001166")
+            term = await api.hpo_term("hp:0001166")
             self.assertEqual(term["name"], "Arachnodactyly")
-            self.assertEqual((await server.hpo_terms(["HP:0001166", "HP:0001519"]))["total"], 2)
-            for tool in [server.hpo_children, server.hpo_parents]:
+            self.assertEqual((await api.hpo_terms(["HP:0001166", "HP:0001519"]))["total"], 2)
+            for tool in [api.hpo_children, api.hpo_parents]:
                 result = await tool("HP:0001166")
                 self.assertEqual(result["results"][0]["id"], "HP:0000098")
                 self.assertEqual(result["pagination"], "local")
-            self.assertEqual((await server.hpo_ancestors("HP:0001166"))["total"], 2)
-            self.assertEqual((await server.hpo_descendants("HP:0001166"))["results"], [])
+            self.assertEqual((await api.hpo_ancestors("HP:0001166"))["total"], 2)
+            self.assertEqual((await api.hpo_descendants("HP:0001166"))["results"], [])
 
     async def test_validation_all_tools(self):
         bad_id = {"term_id": "bad"}
-        for func, args in [(server.hpo_search, {"query": "ab"}),
-                           (server.hpo_search, {"query": "x" * 251}),
-                           (server.hpo_search, {"query": "marfan; drop"}),
-                           (server.hpo_search, {"query": "marfan", "limit": 101}),
-                           (server.hpo_term, bad_id),
-                           (server.hpo_terms, {"term_ids": []}),
-                           (server.hpo_terms, {"term_ids": ["HP:1"]}),
-                           (server.hpo_terms, {"term_ids": ["HP:0001166"] * 101}),
-                           (server.hpo_children, bad_id),
-                           (server.hpo_parents, bad_id),
-                           (server.hpo_ancestors, bad_id),
-                           (server.hpo_descendants, bad_id)]:
+        for func, args in [(api.hpo_search, {"query": "ab"}),
+                           (api.hpo_search, {"query": "x" * 251}),
+                           (api.hpo_search, {"query": "marfan; drop"}),
+                           (api.hpo_search, {"query": "marfan", "limit": 101}),
+                           (api.hpo_term, bad_id),
+                           (api.hpo_terms, {"term_ids": []}),
+                           (api.hpo_terms, {"term_ids": ["HP:1"]}),
+                           (api.hpo_terms, {"term_ids": ["HP:0001166"] * 101}),
+                           (api.hpo_children, bad_id),
+                           (api.hpo_parents, bad_id),
+                           (api.hpo_ancestors, bad_id),
+                           (api.hpo_descendants, bad_id)]:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**args)
 
@@ -73,10 +73,10 @@ class HPOTests(HTTPTestCase):
         with self.mock_http(lambda req: httpx.Response(200, json=None)), \
                 patch("common.http.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaises(ValueError):
-                await server.hpo_term("HP:9999999")
+                await api.hpo_term("HP:9999999")
 
     async def test_api_error(self):
         with self.mock_http(lambda req: httpx.Response(404)), \
                 patch("common.http.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.hpo_term("HP:0001166")
+                await api.hpo_term("HP:0001166")

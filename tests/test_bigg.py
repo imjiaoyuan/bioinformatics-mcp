@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.bigg_mcp import server
+from servers.bigg_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -41,34 +41,34 @@ class BiGGTests(HTTPTestCase):
                     {"bigg_id": "ATPS", "name": "ATPase cytosolic", "model_bigg_id": "Universal"}]})
             self.fail(f"unexpected path {req.url.path}")
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            models = await server.bigg_models(limit=1, offset=1)
+            models = await api.bigg_models(limit=1, offset=1)
             self.assertEqual(models["results"][0]["bigg_id"], "iJO1366")
             self.assertEqual(models["total"], 2)
             self.assertFalse(models["truncated"])
             self.assertEqual(models["pagination"], "local")
             self.assertIn("source_url", models)
-            self.assertEqual((await server.bigg_model("e_coli_core"))["version"], "1.5")
-            self.assertEqual((await server.bigg_model_reactions("e_coli_core"))["results"][0]["bigg_id"], "PGI")
-            self.assertEqual((await server.bigg_model_metabolites("e_coli_core"))["results"][0]["bigg_id"], "g6p_c")
-            reaction = await server.bigg_reaction("e_coli_core", "PGI")
+            self.assertEqual((await api.bigg_model("e_coli_core"))["version"], "1.5")
+            self.assertEqual((await api.bigg_model_reactions("e_coli_core"))["results"][0]["bigg_id"], "PGI")
+            self.assertEqual((await api.bigg_model_metabolites("e_coli_core"))["results"][0]["bigg_id"], "g6p_c")
+            reaction = await api.bigg_reaction("e_coli_core", "PGI")
             self.assertEqual(reaction["results"][0]["reaction_string"], "g6p_c <=> f6p_c")
-            metabolite = await server.bigg_metabolite("e_coli_core", "g6p_c")
+            metabolite = await api.bigg_metabolite("e_coli_core", "g6p_c")
             self.assertEqual(metabolite["formula"], "C6H11O9P")
-            self.assertEqual((await server.bigg_search("ATPM"))["results"][0]["bigg_id"], "ATPM")
+            self.assertEqual((await api.bigg_search("ATPM"))["results"][0]["bigg_id"], "ATPM")
         self.assertIn("/api/v2/models/e_coli_core/reactions/PGI", paths)
 
     async def test_validation_all_tools(self):
-        for func, kwargs in [(server.bigg_models, {"limit": 0}),
-                             (server.bigg_model, {"model_bigg_id": "../x"}),
-                             (server.bigg_model_reactions, {"model_bigg_id": "bad id"}),
-                             (server.bigg_model_reactions, {"model_bigg_id": "e_coli_core", "limit": 101}),
-                             (server.bigg_model_metabolites, {"model_bigg_id": ""}),
-                             (server.bigg_reaction, {"model_bigg_id": "e_coli_core",
+        for func, kwargs in [(api.bigg_models, {"limit": 0}),
+                             (api.bigg_model, {"model_bigg_id": "../x"}),
+                             (api.bigg_model_reactions, {"model_bigg_id": "bad id"}),
+                             (api.bigg_model_reactions, {"model_bigg_id": "e_coli_core", "limit": 101}),
+                             (api.bigg_model_metabolites, {"model_bigg_id": ""}),
+                             (api.bigg_reaction, {"model_bigg_id": "e_coli_core",
                                                      "reaction_bigg_id": "bad reaction"}),
-                             (server.bigg_metabolite, {"model_bigg_id": "e_coli_core",
+                             (api.bigg_metabolite, {"model_bigg_id": "e_coli_core",
                                                        "metabolite_bigg_id": "a/b"}),
-                             (server.bigg_search, {"query": "x", "search_type": "proteins"}),
-                             (server.bigg_search, {"query": "   "})]:
+                             (api.bigg_search, {"query": "x", "search_type": "proteins"}),
+                             (api.bigg_search, {"query": "   "})]:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**kwargs)
 
@@ -76,4 +76,4 @@ class BiGGTests(HTTPTestCase):
         with self.mock_http(lambda req: httpx.Response(404)):
             with patch("common.http.asyncio.sleep", new_callable=AsyncMock):
                 with self.assertRaises(httpx.HTTPStatusError):
-                    await server.bigg_model("no_such_model")
+                    await api.bigg_model("no_such_model")

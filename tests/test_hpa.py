@@ -1,7 +1,7 @@
 import httpx
 from unittest.mock import AsyncMock, patch
 
-from servers.hpa_mcp import server
+from servers.hpa_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -62,12 +62,12 @@ class HPATests(HTTPTestCase):
             return httpx.Response(200, json=[ROW, OTHER])
         with self.mock_http(handler), \
                 mock_sleep():
-            result = await server.hpa_search("Gene:TP53", limit=1, offset=1)
+            result = await api.hpa_search("Gene:TP53", limit=1, offset=1)
         self.assertEqual(result["results"], [OTHER])
         self.assertEqual(result["total"], 2)
         self.assertFalse(result["truncated"])
         with self.mock_http(lambda req: httpx.Response(200, json=[ROW, OTHER])), mock_sleep():
-            flagged = await server.hpa_search("Gene:TP53", limit=1, offset=0)
+            flagged = await api.hpa_search("Gene:TP53", limit=1, offset=0)
         self.assertTrue(flagged["truncated"])
         self.assertEqual(result["pagination"], "local")
         self.assertIn("proteinatlas.org", result["source_url"])
@@ -77,11 +77,11 @@ class HPATests(HTTPTestCase):
             self.assertEqual(req.url.path, QUERY_PATH)
             return httpx.Response(200, json=[ROW, OTHER])
         with self.mock_http(handler), mock_sleep():
-            gene = await server.hpa_gene("tp53")
-            tissue = await server.hpa_tissue_expression("TP53")
-            cell = await server.hpa_cell_expression("TP53")
-            subcell = await server.hpa_subcellular_location("TP53")
-            pathology = await server.hpa_pathology("TP53")
+            gene = await api.hpa_gene("tp53")
+            tissue = await api.hpa_tissue_expression("TP53")
+            cell = await api.hpa_cell_expression("TP53")
+            subcell = await api.hpa_subcellular_location("TP53")
+            pathology = await api.hpa_pathology("TP53")
         self.assertEqual(gene["gene"], "TP53")
         self.assertEqual(gene["Ensembl"], "ENSG00000141510")
         self.assertEqual(gene["gene_url"], "https://www.proteinatlas.org/TP53")
@@ -99,21 +99,21 @@ class HPATests(HTTPTestCase):
     async def test_unknown_gene(self):
         with self.mock_http(lambda req: httpx.Response(200, json=[OTHER])), mock_sleep():
             with self.assertRaises(ValueError):
-                await server.hpa_gene("TP53")
+                await api.hpa_gene("TP53")
 
     async def test_unexpected_payload(self):
         with self.mock_http(lambda req: httpx.Response(200, json={"oops": True})), mock_sleep():
             with self.assertRaises(ValueError):
-                await server.hpa_search("TP53")
+                await api.hpa_search("TP53")
 
     async def test_validation_all_tools(self):
-        cases = [(server.hpa_search, {"query": ""}), (server.hpa_search, {"query": "x", "limit": 101}),
-                 (server.hpa_search, {"query": "x", "offset": -1}),
-                 (server.hpa_gene, {"gene": "bad gene!"}),
-                 (server.hpa_tissue_expression, {"gene": ""}),
-                 (server.hpa_cell_expression, {"gene": "../etc"}),
-                 (server.hpa_subcellular_location, {"gene": "x" * 151}),
-                 (server.hpa_pathology, {"gene": "p53;drop"})]
+        cases = [(api.hpa_search, {"query": ""}), (api.hpa_search, {"query": "x", "limit": 101}),
+                 (api.hpa_search, {"query": "x", "offset": -1}),
+                 (api.hpa_gene, {"gene": "bad gene!"}),
+                 (api.hpa_tissue_expression, {"gene": ""}),
+                 (api.hpa_cell_expression, {"gene": "../etc"}),
+                 (api.hpa_subcellular_location, {"gene": "x" * 151}),
+                 (api.hpa_pathology, {"gene": "p53;drop"})]
         for func, kwargs in cases:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**kwargs)
@@ -121,4 +121,4 @@ class HPATests(HTTPTestCase):
     async def test_api_error(self):
         with self.mock_http(lambda req: httpx.Response(404)), mock_sleep():
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.hpa_gene("TP53")
+                await api.hpa_gene("TP53")

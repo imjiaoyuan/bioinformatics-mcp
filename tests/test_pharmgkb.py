@@ -1,7 +1,7 @@
 import httpx
 from unittest.mock import AsyncMock, patch
 
-from servers.pharmgkb_mcp import server
+from servers.pharmgkb_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -32,31 +32,31 @@ class PharmGKBTests(HTTPTestCase):
             return data_response([drug])
 
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            self.assertEqual((await server.pharmgkb_drug("pa448498"))["results"][0]["id"], "PA448498")
-            self.assertTrue((await server.pharmgkb_gene("PA128"))["source_url"].endswith("/gene?accessionId=PA128"))
-            self.assertEqual((await server.pharmgkb_variant("PA166155139"))["results"][0]["id"], "PA166155139")
-            search = await server.pharmgkb_search("warfarin", "drug", limit=1, offset=0)
+            self.assertEqual((await api.pharmgkb_drug("pa448498"))["results"][0]["id"], "PA448498")
+            self.assertTrue((await api.pharmgkb_gene("PA128"))["source_url"].endswith("/gene?accessionId=PA128"))
+            self.assertEqual((await api.pharmgkb_variant("PA166155139"))["results"][0]["id"], "PA166155139")
+            search = await api.pharmgkb_search("warfarin", "drug", limit=1, offset=0)
             self.assertEqual(search["results"], [drug])
             self.assertEqual(search["pagination"], "local")
-            ca = await server.pharmgkb_clinical_annotations("PA449085", limit=2, offset=0)
+            ca = await api.pharmgkb_clinical_annotations("PA449085", limit=2, offset=0)
             self.assertEqual(ca["results"], [annotation])
             self.assertEqual((ca["limit"], ca["total"]), (2, 1))
-            self.assertEqual((await server.pharmgkb_annotations("PA449085"))["results"], [annotation])
-            self.assertEqual((await server.pharmgkb_annotations("PA449085", "label"))["annotation_type"], "label")
+            self.assertEqual((await api.pharmgkb_annotations("PA449085"))["results"], [annotation])
+            self.assertEqual((await api.pharmgkb_annotations("PA449085", "label"))["annotation_type"], "label")
 
     async def test_validation_all_tools(self):
-        for func, args in [(server.pharmgkb_drug, {"drug_id": "warfarin"}),
-                           (server.pharmgkb_gene, {"gene_id": "../PA128"}),
-                           (server.pharmgkb_variant, {"variant_id": "rs9923189"}),
-                           (server.pharmgkb_search, {"query": ""}),
-                           (server.pharmgkb_search, {"query": "x", "object_type": "pathway"}),
-                           (server.pharmgkb_search, {"query": "x", "limit": 101}),
-                           (server.pharmgkb_clinical_annotations, {"drug_id": "PA449085", "limit": 0}),
-                           (server.pharmgkb_annotations, {"drug_id": "PA449085", "annotation_type": "ca"})]:
+        for func, args in [(api.pharmgkb_drug, {"drug_id": "warfarin"}),
+                           (api.pharmgkb_gene, {"gene_id": "../PA128"}),
+                           (api.pharmgkb_variant, {"variant_id": "rs9923189"}),
+                           (api.pharmgkb_search, {"query": ""}),
+                           (api.pharmgkb_search, {"query": "x", "object_type": "pathway"}),
+                           (api.pharmgkb_search, {"query": "x", "limit": 101}),
+                           (api.pharmgkb_clinical_annotations, {"drug_id": "PA449085", "limit": 0}),
+                           (api.pharmgkb_annotations, {"drug_id": "PA449085", "annotation_type": "ca"})]:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**args)
 
     async def test_api_error(self):
         with self.mock_http(lambda req: httpx.Response(404)):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.pharmgkb_gene("PA128")
+                await api.pharmgkb_gene("PA128")

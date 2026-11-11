@@ -1,65 +1,20 @@
-from __future__ import annotations
-import os
-import re
-import httpx
 from mcp.server.fastmcp import FastMCP
 
+from servers.bioconductor_mcp import api
+
+
 mcp = FastMCP("bioconductor")
-DEFAULT_VERSION = os.getenv("BIOC_VERSION", "3.21")
 
-def _base(version: str) -> str:
-    if not version.replace(".", "").isdigit():
-        raise ValueError("version must look like 3.21")
-    return f"https://bioconductor.org/packages/json/{version}"
+for tool in api.TOOLS:
+    mcp.add_tool(tool)
 
-async def _json(url: str) -> object:
-    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-        r = await client.get(url); r.raise_for_status(); return r.json()
+for uri, resource in api.RESOURCES:
+    mcp.resource(uri)(resource)
 
-@mcp.tool()
-async def bioconductor_search(query: str, version: str = DEFAULT_VERSION, limit: int = 20) -> list[dict]:
-    """Search Bioconductor software and annotation packages by name, title, or description."""
-    limit = max(1, min(limit, 100)); q = query.lower()
-    result: list[dict] = []
-    for repo in ("bioc", "data/annotation", "data/experiment"):
-        try: data = await _json(f"{_base(version)}/{repo}/packages.json")
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 404:
-                continue
-            raise
-        if isinstance(data, dict): data = list(data.values())
-        for item in data if isinstance(data, list) else []:
-            text = " ".join(str(item.get(k, "")) for k in ("Package", "Title", "Description", "biocViews")).lower()
-            if q in text:
-                result.append({k: item.get(k) for k in ("Package", "Version", "Title", "Maintainer", "biocViews")})
-                if len(result) >= limit: return result
-    return result
 
-@mcp.tool()
-async def bioconductor_package(package: str, version: str = DEFAULT_VERSION) -> dict:
-    """Get metadata for a named Bioconductor package across standard repositories."""
-    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9.]*", package):
-        raise ValueError("package must be an R package name")
-    for repo in ("bioc", "data/annotation", "data/experiment"):
-        try:
-            data = await _json(f"{_base(version)}/{repo}/packages.json")
-        except httpx.HTTPStatusError as exc:
-            if exc.response.status_code == 404:
-                continue
-            raise
-        items = list(data.values()) if isinstance(data, dict) else data
-        for item in items if isinstance(items, list) else []:
-            if isinstance(item, dict) and item.get("Package") == package:
-                return {**item, "repository": repo, "release": version,
-                        "web_url": f"https://bioconductor.org/packages/{version}/{repo}/html/{package}.html"}
-    raise ValueError(f"Package {package!r} was not found in Bioconductor {version}")
+def main() -> None:
+    mcp.run()
 
-@mcp.tool()
-async def bioconductor_install(package: str, version: str = DEFAULT_VERSION) -> dict:
-    """Generate reproducible R installation commands for a Bioconductor package."""
-    await bioconductor_package(package, version)
-    return {"r": f'if (!requireNamespace("BiocManager")) install.packages("BiocManager")\nBiocManager::install("{package}", version = "{version}")',
-            "release": version, "package": package}
 
-def main() -> None: mcp.run()
-if __name__ == "__main__": main()
+if __name__ == "__main__":
+    main()

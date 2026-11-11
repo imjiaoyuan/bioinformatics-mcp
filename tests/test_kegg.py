@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.kegg_mcp import server
+from servers.kegg_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -28,21 +28,21 @@ class KEGGTests(HTTPTestCase):
             return httpx.Response(400)
 
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            listing = await server.kegg_list("pathway", organism="hsa", limit=1, offset=0)
+            listing = await api.kegg_list("pathway", organism="hsa", limit=1, offset=0)
             self.assertEqual(listing["results"][0]["id"], "path:hsa00010")
             self.assertEqual(listing["total"], 2)
             self.assertTrue(listing["truncated"])
             self.assertEqual(listing["pagination"], "local")
-            found = await server.kegg_find("compound", "C7H10O5", option="formula")
+            found = await api.kegg_find("compound", "C7H10O5", option="formula")
             self.assertEqual(found["results"][0]["id"], "cpd:C06293")
-            record = await server.kegg_get(["hsa:10458"])
+            record = await api.kegg_get(["hsa:10458"])
             self.assertIn("ENTRY", record["text"])
             self.assertEqual(record["entry_ids"], "hsa:10458")
-            seq = await server.kegg_get(["hsa:10458"], option="aaseq")
+            seq = await api.kegg_get(["hsa:10458"], option="aaseq")
             self.assertIn("MEEPQSDPSV", seq["text"])
-            links = await server.kegg_link("pathway", ["hsa:10458"])
+            links = await api.kegg_link("pathway", ["hsa:10458"])
             self.assertEqual(links["results"][0]["description"], "path:hsa04115")
-            conv = await server.kegg_conv("ncbi-geneid", ["hsa:10458"])
+            conv = await api.kegg_conv("ncbi-geneid", ["hsa:10458"])
             self.assertEqual(conv["results"][0]["id"], "ncbi-geneid:10458")
         self.assertEqual(
             paths, ["/list/pathway/hsa", "/find/compound/C7H10O5/formula", "/get/hsa:10458",
@@ -50,19 +50,19 @@ class KEGGTests(HTTPTestCase):
                     "/conv/ncbi-geneid/hsa:10458"])
 
     async def test_validation_all_tools(self):
-        for func, args in [(server.kegg_list, {"database": "bad"}),
-                           (server.kegg_list, {"database": "pathway", "organism": "hs"}),
-                           (server.kegg_list, {"database": "pathway", "limit": 0}),
-                           (server.kegg_find, {"database": "ko", "query": ""}),
-                           (server.kegg_find, {"database": "ko", "query": "x", "option": "formula"}),
-                           (server.kegg_find, {"database": "compound", "query": "x", "option": "bad"}),
-                           (server.kegg_get, {"entry_ids": []}),
-                           (server.kegg_get, {"entry_ids": ["../etc"]}),
-                           (server.kegg_get, {"entry_ids": ["hsa:10458"], "option": "bad"}),
-                           (server.kegg_link, {"target_db": "bad", "entry_ids": ["hsa:10458"]}),
-                           (server.kegg_link, {"target_db": "pathway", "entry_ids": ["x" * 200]}),
-                           (server.kegg_conv, {"target_db": "ncbi-gene", "entry_ids": ["hsa:10458"]}),
-                           (server.kegg_conv, {"target_db": "uniprot", "entry_ids": ["a", "b", "c", "d",
+        for func, args in [(api.kegg_list, {"database": "bad"}),
+                           (api.kegg_list, {"database": "pathway", "organism": "hs"}),
+                           (api.kegg_list, {"database": "pathway", "limit": 0}),
+                           (api.kegg_find, {"database": "ko", "query": ""}),
+                           (api.kegg_find, {"database": "ko", "query": "x", "option": "formula"}),
+                           (api.kegg_find, {"database": "compound", "query": "x", "option": "bad"}),
+                           (api.kegg_get, {"entry_ids": []}),
+                           (api.kegg_get, {"entry_ids": ["../etc"]}),
+                           (api.kegg_get, {"entry_ids": ["hsa:10458"], "option": "bad"}),
+                           (api.kegg_link, {"target_db": "bad", "entry_ids": ["hsa:10458"]}),
+                           (api.kegg_link, {"target_db": "pathway", "entry_ids": ["x" * 200]}),
+                           (api.kegg_conv, {"target_db": "ncbi-gene", "entry_ids": ["hsa:10458"]}),
+                           (api.kegg_conv, {"target_db": "uniprot", "entry_ids": ["a", "b", "c", "d",
                                                                              "e", "f", "g", "h", "i", "j", "k"]})]:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**args)
@@ -71,4 +71,4 @@ class KEGGTests(HTTPTestCase):
         with self.mock_http(lambda req: httpx.Response(404)), \
                 patch("common.http.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.kegg_get(["map99999"])
+                await api.kegg_get(["map99999"])

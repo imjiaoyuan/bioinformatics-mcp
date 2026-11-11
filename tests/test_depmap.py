@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.depmap_mcp import server
+from servers.depmap_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -46,37 +46,37 @@ class DepMapTests(HTTPTestCase):
             return httpx.Response(404)
 
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            listing = await server.depmap_datasets(limit=2)
+            listing = await api.depmap_datasets(limit=2)
             self.assertEqual(listing["results"], datasets)
             self.assertEqual(listing["pagination"], "local")
-            self.assertEqual(listing["source_url"], server.API_BASE + "/download/datasets")
-            self.assertEqual((await server.depmap_cell_line_sensitivity("ach-000001"))["source_url"],
-                             server.PORTAL_BASE + "/cell_line/compound_sensitivity/ACH-000001")
-            self.assertEqual((await server.depmap_cell_line_datasets("ACH-000001")),
-                             {"source_url": server.PORTAL_BASE + "/cell_line/datasets/ACH-000001",
+            self.assertEqual(listing["source_url"], api.API_BASE + "/download/datasets")
+            self.assertEqual((await api.depmap_cell_line_sensitivity("ach-000001"))["source_url"],
+                             api.PORTAL_BASE + "/cell_line/compound_sensitivity/ACH-000001")
+            self.assertEqual((await api.depmap_cell_line_datasets("ACH-000001")),
+                             {"source_url": api.PORTAL_BASE + "/cell_line/datasets/ACH-000001",
                               "expression": [{"display_name": "CCLE expression"}]})
-            gene = await server.depmap_gene_characterization("TP53")
-            self.assertEqual(gene["source_url"], server.PORTAL_BASE + "/gene/gene_characterization_data/TP53")
-            self.assertIn("source_url", await server.depmap_compound_availability())
-            drc = await server.depmap_compound_drc_dataset("Geldanamycin", "BRD-K19558315")
+            gene = await api.depmap_gene_characterization("TP53")
+            self.assertEqual(gene["source_url"], api.PORTAL_BASE + "/gene/gene_characterization_data/TP53")
+            self.assertIn("source_url", await api.depmap_compound_availability())
+            drc = await api.depmap_compound_drc_dataset("Geldanamycin", "BRD-K19558315")
             self.assertEqual(drc["auc_dataset_label"], "Prism_oncology_per_curve")
-            self.assertEqual((await server.depmap_compound_summary("Geldanamycin", "BRD-K19558315")),
-                             {"source_url": server.API_BASE + "/compound/compound_summary", **summary})
-            self.assertEqual((await server.depmap_compound_dose_curves(
+            self.assertEqual((await api.depmap_compound_summary("Geldanamycin", "BRD-K19558315")),
+                             {"source_url": api.API_BASE + "/compound/compound_summary", **summary})
+            self.assertEqual((await api.depmap_compound_dose_curves(
                 "BRD-K19558315", "Prism_oncology_per_curve", "Prism_oncology_dose_replicate"))["curve_params"],
                 curves["curve_params"])
 
     async def test_validation_all_tools(self):
         cases = [
-            (server.depmap_datasets, {"limit": 101}),
-            (server.depmap_datasets, {"offset": 1_000_001}),
-            (server.depmap_cell_line_sensitivity, {"depmap_id": "A1"}),
-            (server.depmap_cell_line_datasets, {"depmap_id": "../etc"}),
-            (server.depmap_gene_characterization, {"gene_symbol": "1TP53"}),
-            (server.depmap_gene_characterization, {"gene_symbol": "A" * 60}),
-            (server.depmap_compound_drc_dataset, {"compound_label": "", "compound_id": "BRD-K1"}),
-            (server.depmap_compound_summary, {"compound_label": "x", "compound_id": "a" * 200}),
-            (server.depmap_compound_dose_curves, {"compound_id": "BRD-K1", "drc_dataset_label": "a",
+            (api.depmap_datasets, {"limit": 101}),
+            (api.depmap_datasets, {"offset": 1_000_001}),
+            (api.depmap_cell_line_sensitivity, {"depmap_id": "A1"}),
+            (api.depmap_cell_line_datasets, {"depmap_id": "../etc"}),
+            (api.depmap_gene_characterization, {"gene_symbol": "1TP53"}),
+            (api.depmap_gene_characterization, {"gene_symbol": "A" * 60}),
+            (api.depmap_compound_drc_dataset, {"compound_label": "", "compound_id": "BRD-K1"}),
+            (api.depmap_compound_summary, {"compound_label": "x", "compound_id": "a" * 200}),
+            (api.depmap_compound_dose_curves, {"compound_id": "BRD-K1", "drc_dataset_label": "a",
                                                   "replicate_dataset_name": ""}),
         ]
         for func, args in cases:
@@ -86,11 +86,11 @@ class DepMapTests(HTTPTestCase):
     async def test_api_error(self):
         with self.mock_http(_route({})), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.depmap_cell_line_sensitivity("ACH-999999")
+                await api.depmap_cell_line_sensitivity("ACH-999999")
 
     async def test_too_large_response(self):
         def handler(req):
             return httpx.Response(200, json=[{"id": "d" * 20_000}] * 2000)
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaises(ValueError):
-                await server.depmap_datasets()
+                await api.depmap_datasets()

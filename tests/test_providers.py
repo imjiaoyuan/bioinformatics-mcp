@@ -4,12 +4,12 @@ from unittest.mock import patch
 
 import httpx
 
-from servers.anaconda_mcp import server as anaconda
-from servers.bioconductor_mcp import server as bioconductor
-from servers.ensembl_mcp import server as ensembl
-from servers.pdb_mcp import server as pdb
-from servers.publications_mcp import server as publications
-from servers.string_mcp import server as string
+from servers.anaconda_mcp import api as anaconda
+from servers.bioconductor_mcp import api as bioconductor
+from servers.ensembl_mcp import api as ensembl
+from servers.pdb_mcp import api as pdb
+from servers.publications_mcp import api as publications
+from servers.string_mcp import api as string
 
 
 class ProviderTests(unittest.IsolatedAsyncioTestCase):

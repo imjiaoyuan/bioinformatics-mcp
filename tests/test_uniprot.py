@@ -1,7 +1,7 @@
 import httpx
 from copy import deepcopy
 
-from servers.uniprot_mcp import server
+from servers.uniprot_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -32,14 +32,14 @@ class UniProtTests(HTTPTestCase):
     async def test_search_pagination(self):
         with self.mock_http(lambda req: httpx.Response(200, json={"results": [{"primaryAccession": "P04637"}]},
                                                       headers={"Link": '<https://rest.uniprot.org/uniprotkb/search?cursor=x>; rel="next"'})):
-            result = await server.uniprot_search("gene:TP53", 1)
+            result = await api.uniprot_search("gene:TP53", 1)
             self.assertEqual(result["results"][0]["primaryAccession"], "P04637")
             self.assertIn("cursor=x", result["next_url"])
 
     async def test_entry_and_fasta(self):
         with self.mock_http(lambda req: httpx.Response(200, json={"primaryAccession": "P04637"}) if req.url.path.endswith("json") else httpx.Response(200, text=">P04637\nMEEP")):
-            self.assertEqual((await server.uniprot_entry("P04637"))["record"]["primaryAccession"], "P04637")
-            self.assertIn("MEEP", (await server.uniprot_sequence("P04637"))["fasta"])
+            self.assertEqual((await api.uniprot_entry("P04637"))["record"]["primaryAccession"], "P04637")
+            self.assertIn("MEEP", (await api.uniprot_sequence("P04637"))["fasta"])
 
     async def test_mapping_job_lifecycle(self):
         def handler(req):
@@ -50,14 +50,14 @@ class UniProtTests(HTTPTestCase):
                 return httpx.Response(200, json={"results": True})
             return httpx.Response(200, json={"results": [{"from": "7157", "to": "P04637"}], "failedIds": ["bad"]})
         with self.mock_http(handler):
-            self.assertEqual((await server.uniprot_mapping_submit(["7157", "4193"]))["jobId"], "job1")
-            self.assertTrue((await server.uniprot_mapping_status("job1"))["results"])
-            self.assertEqual((await server.uniprot_mapping_results("job1"))["failedIds"], ["bad"])
+            self.assertEqual((await api.uniprot_mapping_submit(["7157", "4193"]))["jobId"], "job1")
+            self.assertTrue((await api.uniprot_mapping_status("job1"))["results"])
+            self.assertEqual((await api.uniprot_mapping_results("job1"))["failedIds"], ["bad"])
 
     async def test_all_tool_validation(self):
-        cases = [(server.uniprot_search, {"query": ""}), (server.uniprot_entry, {"accession": "bad"}),
-                 (server.uniprot_sequence, {"accession": "../P04637"}), (server.uniprot_mapping_submit, {"ids": []}),
-                 (server.uniprot_mapping_status, {"job_id": "../job"}), (server.uniprot_mapping_results, {"job_id": "job1", "limit": 0})]
+        cases = [(api.uniprot_search, {"query": ""}), (api.uniprot_entry, {"accession": "bad"}),
+                 (api.uniprot_sequence, {"accession": "../P04637"}), (api.uniprot_mapping_submit, {"ids": []}),
+                 (api.uniprot_mapping_status, {"job_id": "../job"}), (api.uniprot_mapping_results, {"job_id": "job1", "limit": 0})]
         for func, args in cases:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**args)
@@ -65,7 +65,7 @@ class UniProtTests(HTTPTestCase):
     async def test_missing_entry(self):
         with self.mock_http(lambda req: httpx.Response(404)):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.uniprot_entry("P04637")
+                await api.uniprot_entry("P04637")
 
     async def test_function_exact_gene_species_and_cautions(self):
         def handler(req):
@@ -75,7 +75,7 @@ class UniProtTests(HTTPTestCase):
             self.assertEqual(req.url.path, "/uniprotkb/Q6R0C4.json")
             return httpx.Response(200, json=MYB52)
         with self.mock_http(handler):
-            result = await server.uniprot_function("MYB52", taxon_id=3702)
+            result = await api.uniprot_function("MYB52", taxon_id=3702)
         self.assertEqual(result["selected_accession"], "Q6R0C4")
         self.assertFalse(result["selection_required"])
         entry = result["entries"][0]
@@ -93,7 +93,7 @@ class UniProtTests(HTTPTestCase):
                                    headers={"x-total-results": "3", "Link": '<https://rest.uniprot.org/uniprotkb/search?cursor=x>; rel="next"'})
                     if req.url.path.endswith("search") else httpx.Response(200, json=MYB52))
         with self.mock_http(handler):
-            result = await server.uniprot_function("MYB52", limit=1)
+            result = await api.uniprot_function("MYB52", limit=1)
         self.assertTrue(result["selection_required"])
         self.assertIsNone(result["selected_accession"])
         self.assertTrue(result["truncated"])
@@ -110,7 +110,7 @@ class UniProtTests(HTTPTestCase):
                 return httpx.Response(200, json={"results": [{"primaryAccession": "Q6R0C4"}]})
             return httpx.Response(200, json=record)
         with self.mock_http(handler):
-            result = await server.uniprot_function("MYB52", taxon_id=3702, reviewed_only=False)
+            result = await api.uniprot_function("MYB52", taxon_id=3702, reviewed_only=False)
         entry = result["entries"][0]
         self.assertFalse(entry["reviewed"])
         self.assertEqual(entry["functions"], [])
@@ -122,7 +122,7 @@ class UniProtTests(HTTPTestCase):
                 return httpx.Response(200, json={"results": [{"primaryAccession": "Q6R0C4"}, {"primaryAccession": "P04637"}]})
             return httpx.Response(404) if "P04637" in req.url.path else httpx.Response(200, json=MYB52)
         with self.mock_http(handler):
-            result = await server.uniprot_function("MYB52", taxon_id=3702)
+            result = await api.uniprot_function("MYB52", taxon_id=3702)
         self.assertTrue(result["partial"])
         self.assertEqual(result["entries"][0]["accession"], "Q6R0C4")
         self.assertIsNone(result["selected_accession"])
@@ -130,7 +130,7 @@ class UniProtTests(HTTPTestCase):
 
     async def test_function_empty_and_validation(self):
         with self.mock_http(lambda req: httpx.Response(200, json={"results": []}, headers={"x-total-results": "0"})):
-            result = await server.uniprot_function("UNKNOWN", taxon_id=3702)
+            result = await api.uniprot_function("UNKNOWN", taxon_id=3702)
         self.assertEqual(result["entries"], [])
         self.assertFalse(result["selection_required"])
         self.assertTrue(result["warnings"])
@@ -138,4 +138,4 @@ class UniProtTests(HTTPTestCase):
                      {"gene": "MYB52", "taxon_id": True}, {"gene": "MYB52", "limit": 6},
                      {"gene": "MYB52", "reviewed_only": "yes"}):
             with self.subTest(args=args), self.assertRaises(ValueError):
-                await server.uniprot_function(**args)
+                await api.uniprot_function(**args)

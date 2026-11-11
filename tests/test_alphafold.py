@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.alphafold_mcp import server
+from servers.alphafold_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -36,15 +36,15 @@ class AlphaFoldTests(HTTPTestCase):
             self.assertEqual(req.url.path, "/api/prediction/P00533")
             return httpx.Response(200, json=[_entry()])
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            prediction = await server.alphafold_prediction("p00533")
+            prediction = await api.alphafold_prediction("p00533")
             self.assertEqual(prediction["results"][0]["entryId"], "AF-P00533-F1")
             self.assertEqual(prediction["results"][0]["source_url"],
                              "https://alphafold.ebi.ac.uk/api/prediction/P00533")
-            confidence = (await server.alphafold_confidence("P00533"))["results"][0]
+            confidence = (await api.alphafold_confidence("P00533"))["results"][0]
             self.assertEqual(confidence["global_metric_value"], 75.94)
             self.assertEqual(confidence["fraction_plddt_very_high"], 0.474)
             self.assertTrue(confidence["pae_doc_url"].endswith("-predicted_aligned_error_v6.json"))
-            urls = (await server.alphafold_model_urls("P00533"))["results"][0]
+            urls = (await api.alphafold_model_urls("P00533"))["results"][0]
             self.assertEqual(urls["pdb_url"], "https://alphafold.ebi.ac.uk/files/AF-P00533-F1-model_v6.pdb")
             self.assertEqual(urls["cif_url"], "https://alphafold.ebi.ac.uk/files/AF-P00533-F1-model_v6.cif")
 
@@ -54,7 +54,7 @@ class AlphaFoldTests(HTTPTestCase):
                 return httpx.Response(404)
             return httpx.Response(200, json=[_entry(accession=req.url.path.rsplit("/", 1)[1])])
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            result = await server.alphafold_batch(["P00533", "p99999"], limit=1)
+            result = await api.alphafold_batch(["P00533", "p99999"], limit=1)
             self.assertEqual(result["pagination"], "local")
             self.assertEqual(result["total"], 1)
             self.assertEqual(result["results"][0]["uniprotAccession"], "P00533")
@@ -62,16 +62,16 @@ class AlphaFoldTests(HTTPTestCase):
             self.assertFalse(result["truncated"])
 
     async def test_validation_all_tools(self):
-        for func, args in [(server.alphafold_prediction, {"uniprot": "bad"}),
-                           (server.alphafold_batch, {"accessions": []}),
-                           (server.alphafold_batch, {"accessions": ["P00533"] * 51}),
-                           (server.alphafold_batch, {"accessions": ["P00533"], "limit": 101}),
-                           (server.alphafold_confidence, {"uniprot": "1P005"}),
-                           (server.alphafold_model_urls, {"uniprot": ""})]:
+        for func, args in [(api.alphafold_prediction, {"uniprot": "bad"}),
+                           (api.alphafold_batch, {"accessions": []}),
+                           (api.alphafold_batch, {"accessions": ["P00533"] * 51}),
+                           (api.alphafold_batch, {"accessions": ["P00533"], "limit": 101}),
+                           (api.alphafold_confidence, {"uniprot": "1P005"}),
+                           (api.alphafold_model_urls, {"uniprot": ""})]:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**args)
 
     async def test_api_error(self):
         with self.mock_http(lambda req: httpx.Response(404)):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.alphafold_prediction("P99999")
+                await api.alphafold_prediction("P99999")

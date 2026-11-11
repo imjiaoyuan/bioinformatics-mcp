@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.clinvar_mcp import server
+from servers.clinvar_mcp import api
 from tests.helpers import HTTPTestCase
 
 ESUMMARY = {
@@ -92,11 +92,11 @@ class ClinVarTests(HTTPTestCase):
             self.assertIn("5042478", req.url.params["id"].split(","))
             return httpx.Response(200, json=ESUMMARY)
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            search = await server.clinvar_search("BRCA2[gene]", limit=5, offset=2)
+            search = await api.clinvar_search("BRCA2[gene]", limit=5, offset=2)
             self.assertEqual(search["count"], 3)
             self.assertEqual(search["uids"], ["5042478"])
             self.assertIn("source_url", search)
-            variant = await server.clinvar_variant("5042478")
+            variant = await api.clinvar_variant("5042478")
             self.assertEqual(variant["accession"], "VCV005042478")
             self.assertEqual(variant["genes"], ["BRCA2"])
             self.assertEqual(variant["germline_classification"]["description"], "Pathogenic")
@@ -106,7 +106,7 @@ class ClinVarTests(HTTPTestCase):
             self.assertEqual(variant["spdi"], "NC_000013.11:32332885:G:T")
             self.assertEqual(variant["submissions"]["rcv"], ["RCV007129667"])
             self.assertEqual(variant["protein_change"], "E470*")
-            batch = await server.clinvar_variants(["5042478", "5042473"], limit=1, offset=1)
+            batch = await api.clinvar_variants(["5042478", "5042473"], limit=1, offset=1)
             self.assertEqual(batch["pagination"], "local")
             self.assertEqual(batch["total"], 2)
             self.assertEqual(batch["results"][0]["uid"], "5042473")
@@ -118,7 +118,7 @@ class ClinVarTests(HTTPTestCase):
                 return httpx.Response(200, json={"esearchresult": {"count": "1", "idlist": ["5042478"]}})
             return httpx.Response(200, json=ESUMMARY)
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            self.assertEqual((await server.clinvar_variant("VCV005042478"))["uid"], "5042478")
+            self.assertEqual((await api.clinvar_variant("VCV005042478"))["uid"], "5042478")
 
     async def test_rcv_record(self):
         def handler(req):
@@ -127,7 +127,7 @@ class ClinVarTests(HTTPTestCase):
             self.assertEqual(req.url.params["retmode"], "xml")
             return httpx.Response(200, content=RCV_XML.encode())
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            record = await server.clinvar_rcv("rcv007129667")
+            record = await api.clinvar_rcv("rcv007129667")
             self.assertEqual(record["rcv_accession"], "RCV007129667")
             self.assertEqual(record["germline_classification"], "Pathogenic")
             self.assertEqual(record["review_status"], "criteria provided, single submitter")
@@ -145,25 +145,25 @@ class ClinVarTests(HTTPTestCase):
 
     async def test_validation_all_tools(self):
         with patch.dict(os.environ, {"NCBI_EMAIL": "researcher@example.org"}):
-            for func, args in [(server.clinvar_search, {"query": ""}),
-                               (server.clinvar_search, {"query": "x", "limit": 101}),
-                               (server.clinvar_variant, {"variation_id": "bad id"}),
-                               (server.clinvar_variant, {"variation_id": "SCV000000001"}),
-                               (server.clinvar_variants, {"variation_ids": []}),
-                               (server.clinvar_variants, {"variation_ids": ["RCV1"]}),
-                               (server.clinvar_variants, {"variation_ids": [str(i) for i in range(51)]}),
-                               (server.clinvar_rcv, {"rcv_accession": "SCV000000001"}),
-                               (server.clinvar_rcv, {"rcv_accession": "RCV12345"})]:
+            for func, args in [(api.clinvar_search, {"query": ""}),
+                               (api.clinvar_search, {"query": "x", "limit": 101}),
+                               (api.clinvar_variant, {"variation_id": "bad id"}),
+                               (api.clinvar_variant, {"variation_id": "SCV000000001"}),
+                               (api.clinvar_variants, {"variation_ids": []}),
+                               (api.clinvar_variants, {"variation_ids": ["RCV1"]}),
+                               (api.clinvar_variants, {"variation_ids": [str(i) for i in range(51)]}),
+                               (api.clinvar_rcv, {"rcv_accession": "SCV000000001"}),
+                               (api.clinvar_rcv, {"rcv_accession": "RCV12345"})]:
                 with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                     await func(**args)
 
     async def test_missing_email(self):
         with patch.dict(os.environ, {}, clear=True):
-            for func in [server.clinvar_search, server.clinvar_variant, server.clinvar_variants, server.clinvar_rcv]:
+            for func in [api.clinvar_search, api.clinvar_variant, api.clinvar_variants, api.clinvar_rcv]:
                 with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
-                    await func(**({"variation_ids": ["1"]} if func is server.clinvar_variants
-                                  else {"query": "x"} if func is server.clinvar_search
-                                  else {"variation_id": "1"} if func is server.clinvar_variant
+                    await func(**({"variation_ids": ["1"]} if func is api.clinvar_variants
+                                  else {"query": "x"} if func is api.clinvar_search
+                                  else {"variation_id": "1"} if func is api.clinvar_variant
                                   else {"rcv_accession": "RCV000000001"}))
 
     async def test_source_urls_remove_api_key_for_json_and_xml(self):
@@ -171,7 +171,7 @@ class ClinVarTests(HTTPTestCase):
             self.assertEqual(req.url.params["api_key"], "TEST_SECRET")
             return httpx.Response(200, text=RCV_XML) if "efetch" in req.url.path else httpx.Response(200, json=ESUMMARY)
         with patch.dict(os.environ, {"NCBI_API_KEY": "TEST_SECRET"}), self.mock_http(handler):
-            for result in (await server.clinvar_variant("5042478"), await server.clinvar_rcv("RCV000000001")):
+            for result in (await api.clinvar_variant("5042478"), await api.clinvar_rcv("RCV000000001")):
                 self.assertNotIn("TEST_SECRET", result["source_url"])
                 self.assertNotIn("email=", result["source_url"])
 
@@ -179,5 +179,5 @@ class ClinVarTests(HTTPTestCase):
         with patch.dict(os.environ, {"NCBI_EMAIL": "researcher@example.org"}):
             with self.mock_http(lambda req: httpx.Response(404)):
                 with self.assertRaises(httpx.HTTPStatusError):
-                    await server.clinvar_variant("5042478")
+                    await api.clinvar_variant("5042478")
 

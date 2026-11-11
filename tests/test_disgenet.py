@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.disgenet_mcp import server
+from servers.disgenet_mcp import api
 from tests.helpers import HTTPTestCase
 
 KEY = {"DISGENET_API_KEY": "test-key"}
@@ -36,20 +36,20 @@ class DisGeNETTests(HTTPTestCase):
 
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock), \
                 patch.dict(os.environ, KEY):
-            summary = await server.disgenet_gda_summary()
+            summary = await api.disgenet_gda_summary()
             self.assertEqual(summary["sources"][0]["gdas"], 50000)
             self.assertIn("sourc=ALL", summary["source_url"])
-            gda = (await server.disgenet_gene_diseases(ncbi_gene_id="351"))["results"][0]
+            gda = (await api.disgenet_gene_diseases(ncbi_gene_id="351"))["results"][0]
             self.assertEqual(gda["gene_symbol"], "APP")
             self.assertGreater(gda["score"], 0)
-            self.assertEqual((await server.disgenet_disease_genes("c0002394"))["parameters"]["diseaseid"],
+            self.assertEqual((await api.disgenet_disease_genes("c0002394"))["parameters"]["diseaseid"],
                              "C0002394")
-            vsummary = await server.disgenet_vda_summary("curated")
+            vsummary = await api.disgenet_vda_summary("curated")
             self.assertEqual(params["sourc"], "CURATED")
             self.assertEqual(vsummary["sources"][0]["vdas"], 20000)
-            vda = (await server.disgenet_variant_diseases(snp_id="RS11575418"))["results"][0]
+            vda = (await api.disgenet_variant_diseases(snp_id="RS11575418"))["results"][0]
             self.assertEqual(vda["diseaseid"], "C0038356")
-            self.assertEqual((await server.disgenet_disease_variants("C0038356"))["results"][0]["vdb_id"],
+            self.assertEqual((await api.disgenet_disease_variants("C0038356"))["results"][0]["vdb_id"],
                              "571309")
         self.assertIn("gda/summary", paths[-6])
         for fragment in ["gda/gene", "gda/disease", "vda/summary", "vda/variant", "vda/disease"]:
@@ -64,27 +64,27 @@ class DisGeNETTests(HTTPTestCase):
 
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock), \
                 patch.dict(os.environ, KEY):
-            result = await server.disgenet_gene_diseases(gene_symbol="APP", limit=10, offset=10)
+            result = await api.disgenet_gene_diseases(gene_symbol="APP", limit=10, offset=10)
         self.assertEqual(result["results"], [])
         self.assertIn("source_url", result)
 
     async def test_missing_api_key(self):
         with patch.dict(os.environ, {}, clear=True):
             with self.assertRaises(ValueError):
-                await server.disgenet_gda_summary()
+                await api.disgenet_gda_summary()
 
     async def test_validation_all_tools(self):
-        for func, args in [(server.disgenet_gda_summary, {"sourc": "bad"}),
-                           (server.disgenet_gene_diseases, {}),
-                           (server.disgenet_gene_diseases, {"ncbi_gene_id": "abc"}),
-                           (server.disgenet_gene_diseases, {"gene_symbol": "../"}),
-                           (server.disgenet_disease_genes, {"disease_cui": "disease"}),
-                           (server.disgenet_disease_genes, {"disease_cui": "C1", "limit": 101}),
-                           (server.disgenet_vda_summary, {"sourc": "bad"}),
-                           (server.disgenet_variant_diseases, {}),
-                           (server.disgenet_variant_diseases, {"snp_id": "11575418"}),
-                           (server.disgenet_variant_diseases, {"vdb_id": "x"}),
-                           (server.disgenet_disease_variants, {"disease_cui": ""})]:
+        for func, args in [(api.disgenet_gda_summary, {"sourc": "bad"}),
+                           (api.disgenet_gene_diseases, {}),
+                           (api.disgenet_gene_diseases, {"ncbi_gene_id": "abc"}),
+                           (api.disgenet_gene_diseases, {"gene_symbol": "../"}),
+                           (api.disgenet_disease_genes, {"disease_cui": "disease"}),
+                           (api.disgenet_disease_genes, {"disease_cui": "C1", "limit": 101}),
+                           (api.disgenet_vda_summary, {"sourc": "bad"}),
+                           (api.disgenet_variant_diseases, {}),
+                           (api.disgenet_variant_diseases, {"snp_id": "11575418"}),
+                           (api.disgenet_variant_diseases, {"vdb_id": "x"}),
+                           (api.disgenet_disease_variants, {"disease_cui": ""})]:
             with self.subTest(tool=func.__name__), patch.dict(os.environ, KEY), \
                     self.assertRaises(ValueError):
                 await func(**args)
@@ -92,4 +92,4 @@ class DisGeNETTests(HTTPTestCase):
     async def test_api_error(self):
         with self.mock_http(lambda req: httpx.Response(404)):
             with patch.dict(os.environ, KEY), self.assertRaises(httpx.HTTPStatusError):
-                await server.disgenet_gene_diseases(ncbi_gene_id="351")
+                await api.disgenet_gene_diseases(ncbi_gene_id="351")

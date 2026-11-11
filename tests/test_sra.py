@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.sra_mcp import server
+from servers.sra_mcp import api
 from tests.helpers import HTTPTestCase
 
 EXPSUM = {
@@ -29,8 +29,8 @@ class SRATests(HTTPTestCase):
             ids = ["1", "2", "3", "4"][start:start + 2]
             return httpx.Response(200, json={"esearchresult": {"count": "4", "idlist": ids}})
         with patch.dict(os.environ, {"NCBI_EMAIL": "test@example.invalid", "NCBI_API_KEY": "TEST_SECRET"}), self.mock_http(handler):
-            first = await server.sra_search("human", limit=2)
-            second = await server.sra_search("human", limit=2, offset=first["next_offset"])
+            first = await api.sra_search("human", limit=2)
+            second = await api.sra_search("human", limit=2, offset=first["next_offset"])
         self.assertEqual(first["uids"], ["1", "2"])
         self.assertEqual(second["uids"], ["3", "4"])
         self.assertFalse(second["truncated"])
@@ -40,8 +40,8 @@ class SRATests(HTTPTestCase):
             if endpoint == "esearch":
                 return {"esearchresult": {"count": "8", "idlist": ["8"]}}
             return {"result": {"8": EXPSUM}}
-        with patch.object(server, "_get", side_effect=get):
-            result = await server.sra_studies("human", limit=1)
+        with patch.object(api, "_get", side_effect=get):
+            result = await api.sra_studies("human", limit=1)
         self.assertTrue(result["truncated"])
         self.assertEqual(result["next_offset"], 1)
         self.assertEqual(result["total_kind"], "studies_in_this_page")
@@ -53,10 +53,10 @@ class SRATests(HTTPTestCase):
             self.assertEqual(req.url.params["api_key"], "TEST_SECRET")
             return httpx.Response(200, json={"result": {"1": summary}})
         with patch.dict(os.environ, {"NCBI_EMAIL": "test@example.invalid", "NCBI_API_KEY": "TEST_SECRET"}), self.mock_http(handler):
-            result = await server._get("esummary", {"id": "1"})
+            result = await api._get("esummary", {"id": "1"})
         self.assertNotIn("TEST_SECRET", result["source_url"])
         self.assertNotIn("email=", result["source_url"])
-        parsed = server._summarize(summary)
+        parsed = api._summarize(summary)
         self.assertEqual(parsed["title"], "Example")
         self.assertEqual(parsed["study"][0]["acc"], "SRP1")
         self.assertEqual(parsed["instrument_model"], "NovaSeq")
@@ -71,16 +71,16 @@ class SRATests(HTTPTestCase):
             return httpx.Response(200, json={"result": {"uids": ["8"], "8": EXPSUM}})
         with patch.dict(os.environ, {"NCBI_EMAIL": "researcher@example.org"}), \
              self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            search = await server.sra_search('organism="Homo sapiens"', limit=5, offset=1)
+            search = await api.sra_search('organism="Homo sapiens"', limit=5, offset=1)
             self.assertEqual(search["count"], 2)
             self.assertEqual(search["uids"], ["8", "9"])
             self.assertIn("source_url", search)
-            metadata = await server.sra_run_metadata("srr000001")
+            metadata = await api.sra_run_metadata("srr000001")
             self.assertEqual(metadata["study"][0]["acc"], "SRP000001")
             self.assertEqual(metadata["organism"][0]["ScientificName"], "Homo sapiens")
             self.assertEqual(metadata["runs"][0]["acc"], "SRR000001")
             self.assertIn("source_url", metadata)
-            studies = await server.sra_studies("human", limit=5)
+            studies = await api.sra_studies("human", limit=5)
             self.assertEqual(studies["count"], 2)
             self.assertEqual(len(studies["results"]), 1)
             self.assertEqual(studies["results"][0]["study_accession"], "SRP000001")
@@ -88,20 +88,20 @@ class SRATests(HTTPTestCase):
             self.assertIn("source_url", studies)
 
     async def test_validation_all_tools(self):
-        for func, kwargs in [(server.sra_search, {"query": ""}),
-                             (server.sra_search, {"query": "ok", "limit": 0}),
-                             (server.sra_run_metadata, {"run_accession": "GSM123"}),
-                             (server.sra_studies, {"query": "a b\nc"}),
-                             (server.sra_studies, {"query": "ok", "offset": -1})]:
+        for func, kwargs in [(api.sra_search, {"query": ""}),
+                             (api.sra_search, {"query": "ok", "limit": 0}),
+                             (api.sra_run_metadata, {"run_accession": "GSM123"}),
+                             (api.sra_studies, {"query": "a b\nc"}),
+                             (api.sra_studies, {"query": "ok", "offset": -1})]:
             with patch.dict(os.environ, {"NCBI_EMAIL": "researcher@example.org"}), \
                  self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**kwargs)
         with patch.dict(os.environ, {}, clear=True), self.assertRaises(ValueError):
-            await server.sra_search("anything")
+            await api.sra_search("anything")
 
     async def test_api_error(self):
         with patch.dict(os.environ, {"NCBI_EMAIL": "researcher@example.org"}), \
              self.mock_http(lambda req: httpx.Response(404)), \
              patch("common.http.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.sra_search("human")
+                await api.sra_search("human")

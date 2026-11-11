@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.mygene_mcp import server
+from servers.mygene_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -46,20 +46,20 @@ class MyGeneTests(HTTPTestCase):
             return httpx.Response(404)
 
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            hits = await server.mygene_query("symbol:cdk2", species="human", limit=5, skip=10)
+            hits = await api.mygene_query("symbol:cdk2", species="human", limit=5, skip=10)
             self.assertEqual(hits["hits"][0]["symbol"], "CDK2")
             self.assertEqual(hits["source_url"], "https://api.mygene.info/v3/query?q=symbol%3Acdk2&size=5&from=10&species=human")
-            gene = await server.mygene_gene("1017", fields="symbol,name")
+            gene = await api.mygene_gene("1017", fields="symbol,name")
             self.assertEqual(gene["symbol"], "CDK2")
-            batch = await server.mygene_batch(["1017", "ENSG00000123374"], scopes="entrezgene,ensemblgene")
+            batch = await api.mygene_batch(["1017", "ENSG00000123374"], scopes="entrezgene,ensemblgene")
             self.assertNotIn("notfound", batch["results"][0])
             self.assertTrue(batch["results"][1]["notfound"])
-            variant = await server.myvariant_variant("chr1:g.35367G>A", fields="cadd")
+            variant = await api.myvariant_variant("chr1:g.35367G>A", fields="cadd")
             self.assertEqual(variant["cadd"]["phred"], 1.493)
             self.assertEqual(variant["source_url"], "https://api.myvariant.info/v1/variant/chr1:g.35367G%3EA?fields=cadd")
-            vbatch = await server.myvariant_batch(["chr1:g.35367G>A", "chr7:g.55241707G>T"])
+            vbatch = await api.myvariant_batch(["chr1:g.35367G>A", "chr7:g.55241707G>T"])
             self.assertNotIn("notfound", vbatch["results"][0])
-            meta = await server.mygene_metadata()
+            meta = await api.mygene_metadata()
             self.assertEqual(meta["build_version"], "2023")
         self.assertIn(("api.myvariant.info", "/v1/variant"), paths)
 
@@ -70,19 +70,19 @@ class MyGeneTests(HTTPTestCase):
             return httpx.Response(200, json={"hits": []})
 
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            self.assertEqual((await server.mygene_query("cdk2"))["hits"], [])
+            self.assertEqual((await api.mygene_query("cdk2"))["hits"], [])
 
     async def test_validation_all_tools(self):
-        cases = [(server.mygene_query, {"query": ""}),
-                 (server.mygene_query, {"query": "cdk2", "limit": 101}),
-                 (server.mygene_gene, {"gene_id": "bad id"}),
-                 (server.mygene_batch, {"ids": []}),
-                 (server.mygene_batch, {"ids": ["1017", "bad\nid"]}),
-                 (server.mygene_batch, {"ids": ["1017"], "scopes": "a" * 201}),
-                 (server.myvariant_variant, {"variant_id": "chr1;g.35367G>A"}),
-                 (server.myvariant_variant, {"variant_id": "chr1:g.35367G>A", "fields": "a" * 501}),
-                 (server.myvariant_batch, {"ids": []}),
-                 (server.myvariant_batch, {"ids": ["chr1:g.1A>T;drop"]})]
+        cases = [(api.mygene_query, {"query": ""}),
+                 (api.mygene_query, {"query": "cdk2", "limit": 101}),
+                 (api.mygene_gene, {"gene_id": "bad id"}),
+                 (api.mygene_batch, {"ids": []}),
+                 (api.mygene_batch, {"ids": ["1017", "bad\nid"]}),
+                 (api.mygene_batch, {"ids": ["1017"], "scopes": "a" * 201}),
+                 (api.myvariant_variant, {"variant_id": "chr1;g.35367G>A"}),
+                 (api.myvariant_variant, {"variant_id": "chr1:g.35367G>A", "fields": "a" * 501}),
+                 (api.myvariant_batch, {"ids": []}),
+                 (api.myvariant_batch, {"ids": ["chr1:g.1A>T;drop"]})]
         for func, args in cases:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**args)
@@ -90,7 +90,7 @@ class MyGeneTests(HTTPTestCase):
     async def test_api_error(self):
         with self.mock_http(lambda req: httpx.Response(404)):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.mygene_gene("999999999999")
+                await api.mygene_gene("999999999999")
         with self.mock_http(lambda req: httpx.Response(404)):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.myvariant_variant("chr1:g.999999999A>T")
+                await api.myvariant_variant("chr1:g.999999999A>T")

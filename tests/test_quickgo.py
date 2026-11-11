@@ -1,7 +1,7 @@
 import httpx
 from unittest.mock import AsyncMock, patch
 
-from servers.quickgo_mcp import server
+from servers.quickgo_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -37,19 +37,19 @@ class QuickGoTests(HTTPTestCase):
         paths: list[str] = []
         with self.mock_http(lambda req: _handler(req, paths)), \
                 patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            term = await server.quickgo_go_term(["go:0006915"])
+            term = await api.quickgo_go_term(["go:0006915"])
             self.assertEqual(term["results"][0]["id"], "GO:0006915")
             self.assertTrue(term["source_url"].endswith("/ontology/go/terms/GO:0006915"))
 
-            search = await server.quickgo_go_search("apoptosome")
+            search = await api.quickgo_go_search("apoptosome")
             self.assertEqual(search["results"][0]["id"], "GO:0043293")
 
-            ann = await server.quickgo_annotations("UniProtKB:P12345", limit=3, offset=3)
+            ann = await api.quickgo_annotations("UniProtKB:P12345", limit=3, offset=3)
             self.assertEqual(ann["pageInfo"]["current"], 2)
             self.assertEqual(ann["results"][0]["goId"], "GO:0003824")
             self.assertTrue(ann["source_url"].startswith("https://www.ebi.ac.uk/QuickGO/services/annotation/search"))
 
-            slim = await server.quickgo_slim(["GO:0006915", "GO:0006955"], ["GO:0008150", "GO:0006955"])
+            slim = await api.quickgo_slim(["GO:0006915", "GO:0006955"], ["GO:0008150", "GO:0006955"])
             rows = {row["term"]: row for row in slim["results"]}
             self.assertEqual(rows["GO:0006915"]["slim_id"], "GO:0008150")
             self.assertFalse(rows["GO:0006915"]["direct"])
@@ -65,23 +65,23 @@ class QuickGoTests(HTTPTestCase):
             seen.update(req.url.params)
             return httpx.Response(200, json={"numberOfHits": 0, "results": [], "pageInfo": {"resultsPerPage": 20, "current": 1, "total": 0}})
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            await server.quickgo_annotations("P12345", go_id="GO:0006915", aspect="biological_process")
+            await api.quickgo_annotations("P12345", go_id="GO:0006915", aspect="biological_process")
         self.assertEqual(seen["goId"], "GO:0006915")
         self.assertEqual(seen["aspect"], "biological_process")
 
     async def test_validation_all_tools(self):
-        for func, args in [(server.quickgo_go_term, {"go_ids": ["GO:6915"]}),
-                           (server.quickgo_go_term, {"go_ids": []}),
-                           (server.quickgo_go_term, {"go_ids": ["CHEMBL25"]}),
-                           (server.quickgo_go_search, {"query": "  "}),
-                           (server.quickgo_go_search, {"query": "ok", "limit": 0}),
-                           (server.quickgo_annotations, {"gene_product_id": "bad id!"}),
-                           (server.quickgo_annotations, {"gene_product_id": "P12345", "go_id": "GO:1"}),
-                           (server.quickgo_annotations, {"gene_product_id": "P12345", "aspect": "cheese"}),
-                           (server.quickgo_annotations, {"gene_product_id": "P12345", "limit": 101}),
-                           (server.quickgo_annotations, {"gene_product_id": "P12345", "limit": 10, "offset": 5}),
-                           (server.quickgo_slim, {"go_ids": ["GO:0006915"], "slim_ids": []}),
-                           (server.quickgo_slim, {"go_ids": ["GO:0006915"], "slim_ids": ["GO:0008150"], "relation": "regulates"})]:
+        for func, args in [(api.quickgo_go_term, {"go_ids": ["GO:6915"]}),
+                           (api.quickgo_go_term, {"go_ids": []}),
+                           (api.quickgo_go_term, {"go_ids": ["CHEMBL25"]}),
+                           (api.quickgo_go_search, {"query": "  "}),
+                           (api.quickgo_go_search, {"query": "ok", "limit": 0}),
+                           (api.quickgo_annotations, {"gene_product_id": "bad id!"}),
+                           (api.quickgo_annotations, {"gene_product_id": "P12345", "go_id": "GO:1"}),
+                           (api.quickgo_annotations, {"gene_product_id": "P12345", "aspect": "cheese"}),
+                           (api.quickgo_annotations, {"gene_product_id": "P12345", "limit": 101}),
+                           (api.quickgo_annotations, {"gene_product_id": "P12345", "limit": 10, "offset": 5}),
+                           (api.quickgo_slim, {"go_ids": ["GO:0006915"], "slim_ids": []}),
+                           (api.quickgo_slim, {"go_ids": ["GO:0006915"], "slim_ids": ["GO:0008150"], "relation": "regulates"})]:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**args)
 
@@ -89,4 +89,4 @@ class QuickGoTests(HTTPTestCase):
         with self.mock_http(lambda req: httpx.Response(404)), \
                 patch("common.http.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.quickgo_go_term(["GO:9999999"])
+                await api.quickgo_go_term(["GO:9999999"])

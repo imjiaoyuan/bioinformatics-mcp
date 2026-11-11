@@ -2,7 +2,7 @@ import json
 
 import httpx
 
-from servers.cncb_mcp import server
+from servers.cncb_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -25,23 +25,23 @@ class CNCBTests(HTTPTestCase):
             return httpx.Response(200, text=json.dumps(_payload(rows)))
 
         with self.mock_http(handler):
-            result = await server.cncb_search("rice", database="gsa", limit=5)
+            result = await api.cncb_search("rice", database="gsa", limit=5)
         self.assertEqual(result["count"], 1)
         self.assertEqual(result["records"][0]["id"], "CRA024741")
         self.assertTrue(result["records"][0]["url"].startswith("https://"))
 
     async def test_search_validation(self):
         with self.assertRaises(ValueError):
-            await server.cncb_search("")
+            await api.cncb_search("")
         with self.assertRaises(ValueError):
-            await server.cncb_search("rice", database="pinterest")
+            await api.cncb_search("rice", database="pinterest")
         with self.assertRaises(ValueError):
-            await server.cncb_search("rice", limit=0)
+            await api.cncb_search("rice", limit=0)
 
     async def test_search_api_error_not_silenced(self):
         with self.mock_http(lambda req: httpx.Response(500)):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.cncb_search("rice")
+                await api.cncb_search("rice")
 
     async def test_business_errors_and_malformed_payloads_are_not_zero_hits(self):
         payloads = [{"code": "500", "message": "Failed"}, {"code": "500", **_payload([]), "success": False},
@@ -50,8 +50,8 @@ class CNCBTests(HTTPTestCase):
         for payload in payloads:
             with self.subTest(payload=payload), self.mock_http(lambda req: httpx.Response(200, json=payload)):
                 with self.assertRaises((ValueError, RuntimeError)):
-                    await server.cncb_search("rice")
+                    await api.cncb_search("rice")
         with self.mock_http(lambda req: httpx.Response(200, json=_payload([]))):
-            result = await server.cncb_search("not found")
+            result = await api.cncb_search("not found")
         self.assertEqual(result["count"], 0)
         self.assertEqual(result["records"], [])

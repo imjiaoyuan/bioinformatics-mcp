@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import httpx
 
-from servers.cellxgene_mcp import server
+from servers.cellxgene_mcp import api
 from tests.helpers import HTTPTestCase
 
 DATASET = "00000000-0000-0000-0000-000000000001"
@@ -73,14 +73,14 @@ class RestTests(HTTPTestCase):
 
     async def test_versions_rest(self):
         with self.mock_http(self.handler):
-            result = await server.cellxgene_versions()
+            result = await api.cellxgene_versions()
         rows = {row["release_build"]: row for row in result["results"]}
         self.assertIn(VERSION, rows)
         self.assertEqual(result["aliases"], {"stable": "2025-11-08", "latest": "2025-11-17"})
 
     async def test_datasets_filters_and_paging(self):
         with self.mock_http(self.handler):
-            result = await server.cellxgene_datasets(organism="Homo sapiens", tissue="lung")
+            result = await api.cellxgene_datasets(organism="Homo sapiens", tissue="lung")
         self.assertEqual(len(result["results"]), 1)
         row = result["results"][0]
         self.assertEqual(row["dataset_id"], DATASET)
@@ -88,22 +88,22 @@ class RestTests(HTTPTestCase):
         self.assertEqual(row["tissue"], ["lung"])
         self.assertIn("datasets.cellxgene.cziscience.com", row["assets"][0]["url"])
         with self.mock_http(self.handler):
-            result = await server.cellxgene_datasets(query="mouse")
+            result = await api.cellxgene_datasets(query="mouse")
         self.assertEqual(result["results"][0]["title"], "Mouse brain")
 
     async def test_dataset_by_id_and_collection(self):
         with self.mock_http(self.handler):
-            result = await server.cellxgene_datasets(dataset_id=DATASET)
+            result = await api.cellxgene_datasets(dataset_id=DATASET)
         self.assertEqual(result["total"], 1)
         with self.mock_http(self.handler):
-            result = await server.cellxgene_datasets(collection_id=COLLECTION)
+            result = await api.cellxgene_datasets(collection_id=COLLECTION)
         self.assertEqual(result["total"], 1)
         self.assertTrue(all(r["collection_id"] == COLLECTION for r in result["results"]))
 
     async def test_dataset_url_rest(self):
         with self.mock_http(self.handler):
-            result = await server.cellxgene_dataset_url(DATASET)
-            stable = await server.cellxgene_dataset_url(DATASET, version="latest")
+            result = await api.cellxgene_dataset_url(DATASET)
+            stable = await api.cellxgene_dataset_url(DATASET, version="latest")
         self.assertEqual(result["census_version"], "2025-11-08")
         self.assertEqual(result["h5ad_uri"],
                          f"s3://cellxgene-census-public-us-west-2/cell-census/2025-11-08/h5ads/{DATASET}.h5ad")
@@ -112,23 +112,23 @@ class RestTests(HTTPTestCase):
         self.assertEqual(stable["census_version"], "2025-11-17")
         with self.mock_http(self.handler):
             with self.assertRaises(ValueError):
-                await server.cellxgene_dataset_url(DATASET, version="1999-01-01")
+                await api.cellxgene_dataset_url(DATASET, version="1999-01-01")
 
     async def test_rest_tools_work_without_sdk(self):
         with self.mock_http(self.handler), \
-                patch("servers.cellxgene_mcp.server.importlib.import_module", side_effect=ImportError):
-            await server.cellxgene_versions()
-            await server.cellxgene_datasets(organism="Homo sapiens")
-            await server.cellxgene_dataset_url(DATASET)
+                patch("servers.cellxgene_mcp.api.importlib.import_module", side_effect=ImportError):
+            await api.cellxgene_versions()
+            await api.cellxgene_datasets(organism="Homo sapiens")
+            await api.cellxgene_dataset_url(DATASET)
 
     async def test_validation_rest(self):
-        for func, args in [(server.cellxgene_versions, {"limit": 0}),
-                           (server.cellxgene_versions, {"offset": -1}),
-                           (server.cellxgene_datasets, {"organism": ""}),
-                           (server.cellxgene_datasets, {"dataset_id": "bad"}),
-                           (server.cellxgene_datasets, {"collection_id": "../"}),
-                           (server.cellxgene_dataset_url, {"dataset_id": "bad"}),
-                           (server.cellxgene_dataset_url, {"dataset_id": DATASET, "version": "bad"})]:
+        for func, args in [(api.cellxgene_versions, {"limit": 0}),
+                           (api.cellxgene_versions, {"offset": -1}),
+                           (api.cellxgene_datasets, {"organism": ""}),
+                           (api.cellxgene_datasets, {"dataset_id": "bad"}),
+                           (api.cellxgene_datasets, {"collection_id": "../"}),
+                           (api.cellxgene_dataset_url, {"dataset_id": "bad"}),
+                           (api.cellxgene_dataset_url, {"dataset_id": DATASET, "version": "bad"})]:
             with self.subTest(tool=func.__name__, args=args):
                 with self.mock_http(self.handler):
                     with self.assertRaises(ValueError):
@@ -137,7 +137,7 @@ class RestTests(HTTPTestCase):
     async def test_rate_limit_error(self):
         with self.mock_http(lambda req: httpx.Response(429)), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.cellxgene_versions()
+                await api.cellxgene_versions()
 
 
 class SdkTests(unittest.IsolatedAsyncioTestCase):
@@ -159,8 +159,8 @@ class SdkTests(unittest.IsolatedAsyncioTestCase):
     async def test_scan_window_cursor_escaping_and_no_concat(self):
         rows = [{"soma_joinid": 10, "feature_id": "ENSG1"}, {"soma_joinid": 15, "feature_id": "ENSG2"}]
         sdk, frame = self.make_sdk(rows)
-        with patch.object(server, "_sdk", return_value=sdk):
-            result = await server.cellxgene_cells(tissue='lung" or tissue != "x', after_joinid=9, scan_size=20, limit=1)
+        with patch.object(api, "_sdk", return_value=sdk):
+            result = await api.cellxgene_cells(tissue='lung" or tissue != "x', after_joinid=9, scan_size=20, limit=1)
         kwargs = frame.read.call_args.kwargs
         self.assertEqual(kwargs["coords"], (slice(10, 29),))
         self.assertEqual(kwargs["value_filter"], 'tissue == "lung\\" or tissue != \\"x"')
@@ -172,12 +172,12 @@ class SdkTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_genes_and_empty_window(self):
         sdk, frame = self.make_sdk([])
-        with patch.object(server, "_sdk", return_value=sdk):
-            self.assertEqual((await server.cellxgene_genes(gene_id="ENSG1"))["results"], [])
+        with patch.object(api, "_sdk", return_value=sdk):
+            self.assertEqual((await api.cellxgene_genes(gene_id="ENSG1"))["results"], [])
             self.assertIn("feature_id ==", frame.read.call_args.kwargs["value_filter"])
             frame.non_empty_domain.return_value = ((0, 0),)
-            self.assertFalse((await server.cellxgene_genes())["has_more"])
-            result = await server.cellxgene_genes(after_joinid=100)
+            self.assertFalse((await api.cellxgene_genes())["has_more"])
+            result = await api.cellxgene_genes(after_joinid=100)
             self.assertEqual(result["next_after_joinid"], 100)
             self.assertFalse(result["has_more"])
 
@@ -188,8 +188,8 @@ class SdkTests(unittest.IsolatedAsyncioTestCase):
         sdk.get_anndata.return_value = SimpleNamespace(n_obs=1, n_vars=1, X=matrix,
             obs=Records([{"soma_joinid": 10, "dataset_id": DATASET}]),
             var=Records([{"soma_joinid": 20, "feature_id": "ENSG1"}]))
-        with patch.object(server, "_sdk", return_value=sdk):
-            result = await server.cellxgene_expression([10, 11], ["ENSG1", "ENSG2"], VERSION)
+        with patch.object(api, "_sdk", return_value=sdk):
+            result = await api.cellxgene_expression([10, 11], ["ENSG1", "ENSG2"], VERSION)
         self.assertEqual(sdk.get_anndata.call_args.kwargs["obs_coords"], [10, 11])
         self.assertEqual(sdk.get_anndata.call_args.kwargs["X_name"], "raw")
         self.assertEqual(result["matrix"], [[7]])
@@ -197,27 +197,27 @@ class SdkTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["missing_gene_ids"], ["ENSG2"])
 
     async def test_validation_sdk_tools(self):
-        for func, args in [(server.cellxgene_cells, {"organism": "unknown"}),
-                           (server.cellxgene_genes, {"gene_id": "../"}),
-                           (server.cellxgene_expression, {"cell_ids": [0], "gene_ids": ["ENSG1"], "version": "stable"}),
-                           (server.cellxgene_expression, {"cell_ids": [True], "gene_ids": ["ENSG1"], "version": VERSION}),
-                           (server.cellxgene_expression, {"cell_ids": [0], "gene_ids": ["ENSG1"] * 101, "version": VERSION})]:
+        for func, args in [(api.cellxgene_cells, {"organism": "unknown"}),
+                           (api.cellxgene_genes, {"gene_id": "../"}),
+                           (api.cellxgene_expression, {"cell_ids": [0], "gene_ids": ["ENSG1"], "version": "stable"}),
+                           (api.cellxgene_expression, {"cell_ids": [True], "gene_ids": ["ENSG1"], "version": VERSION}),
+                           (api.cellxgene_expression, {"cell_ids": [0], "gene_ids": ["ENSG1"] * 101, "version": VERSION})]:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**args)
 
     async def test_missing_sdk_and_upstream_failure(self):
-        with patch("servers.cellxgene_mcp.server.importlib.import_module", side_effect=ImportError):
+        with patch("servers.cellxgene_mcp.api.importlib.import_module", side_effect=ImportError):
             with self.assertRaisesRegex(RuntimeError, "Optional CELLxGENE SDK"):
-                await server.cellxgene_cells()
+                await api.cellxgene_cells()
             with self.assertRaisesRegex(RuntimeError, "Optional CELLxGENE SDK"):
-                await server.cellxgene_genes()
+                await api.cellxgene_genes()
             with self.assertRaisesRegex(RuntimeError, "Optional CELLxGENE SDK"):
-                await server.cellxgene_expression([0], ["ENSG1"], VERSION)
+                await api.cellxgene_expression([0], ["ENSG1"], VERSION)
         sdk, _ = self.make_sdk([])
         sdk.get_census_version_description.side_effect = RuntimeError("unavailable")
-        with patch.object(server, "_sdk", return_value=sdk):
+        with patch.object(api, "_sdk", return_value=sdk):
             with self.assertRaisesRegex(RuntimeError, "unavailable"):
-                await server.cellxgene_cells()
+                await api.cellxgene_cells()
 
     @unittest.skipUnless(importlib.util.find_spec("tiledbsoma"), "optional CELLxGENE SDK is not installed")
     async def test_real_soma_dataframe_iterator_and_filter(self):
@@ -234,8 +234,8 @@ class SdkTests(unittest.IsolatedAsyncioTestCase):
                 sdk = Mock()
                 sdk.get_census_version_description.return_value = {"release_build": VERSION}
                 sdk.open_soma.return_value = nullcontext({"census_data": {"homo_sapiens": SimpleNamespace(obs=frame)}})
-                with patch.object(server, "_sdk", return_value=sdk):
-                    result = await server.cellxgene_cells(tissue="lung", limit=1, scan_size=3)
+                with patch.object(api, "_sdk", return_value=sdk):
+                    result = await api.cellxgene_cells(tissue="lung", limit=1, scan_size=3)
             self.assertEqual(result["results"], [{"soma_joinid": 0, "tissue": "lung"}])
             self.assertEqual(result["next_after_joinid"], 0)
             self.assertTrue(result["truncated"])

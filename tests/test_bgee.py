@@ -1,7 +1,7 @@
 import httpx
 from unittest.mock import AsyncMock, patch
 
-from servers.bgee_mcp import server
+from servers.bgee_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -51,15 +51,15 @@ class BgeeTests(HTTPTestCase):
             raise AssertionError(f"unexpected query: {query}")
 
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            self.assertEqual((await server.bgee_species(limit=5))["results"][0]["scientificName"], "Homo sapiens")
-            info = await server.bgee_gene_info("ensg00000130208")
+            self.assertEqual((await api.bgee_species(limit=5))["results"][0]["scientificName"], "Homo sapiens")
+            info = await api.bgee_gene_info("ensg00000130208")
             self.assertEqual(info["results"][0]["id"], "ENSG00000130208")
-            self.assertEqual((await server.bgee_gene_species("Mt-Co1"))["results"][0]["geneName"], "Mt-co1")
-            expression = await server.bgee_gene_expression("APOC1", species="human", offset=10)
+            self.assertEqual((await api.bgee_gene_species("Mt-Co1"))["results"][0]["geneName"], "Mt-co1")
+            expression = await api.bgee_gene_expression("APOC1", species="human", offset=10)
             self.assertEqual(expression["results"][0]["anatName"], "blood")
-            scores = await server.bgee_gene_expression_scores("APOC1", species="Mouse")
+            scores = await api.bgee_gene_expression_scores("APOC1", species="Mouse")
             self.assertEqual(scores["results"][0]["score"], "45.5")
-            genes = await server.bgee_anatomy_genes("Brain", limit=2)
+            genes = await api.bgee_anatomy_genes("Brain", limit=2)
             self.assertEqual(genes["limit"], 2)
         self.assertEqual(len(calls), 6)
         for call in calls:
@@ -72,11 +72,11 @@ class BgeeTests(HTTPTestCase):
         self.assertIn('"ENSG00000130208"', sent_query(calls[1:2]))
 
     async def test_validation_all_tools(self):
-        cases = [(server.bgee_species, {"limit": 0}), (server.bgee_species, {"offset": -1}),
-                 (server.bgee_gene_info, {"ensembl_id": "bad"}), (server.bgee_gene_species, {"gene": "a; DROP"}),
-                 (server.bgee_gene_expression, {"gene": "APOC1", "species": "hu*man"}),
-                 (server.bgee_gene_expression_scores, {"gene": "", "limit": 101}),
-                 (server.bgee_anatomy_genes, {"anatomy": "brain\n"})]
+        cases = [(api.bgee_species, {"limit": 0}), (api.bgee_species, {"offset": -1}),
+                 (api.bgee_gene_info, {"ensembl_id": "bad"}), (api.bgee_gene_species, {"gene": "a; DROP"}),
+                 (api.bgee_gene_expression, {"gene": "APOC1", "species": "hu*man"}),
+                 (api.bgee_gene_expression_scores, {"gene": "", "limit": 101}),
+                 (api.bgee_anatomy_genes, {"anatomy": "brain\n"})]
         for func, kwargs in cases:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**kwargs)
@@ -84,4 +84,4 @@ class BgeeTests(HTTPTestCase):
     async def test_api_error(self):
         with self.mock_http(lambda req: httpx.Response(404)):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.bgee_gene_expression("APOC1")
+                await api.bgee_gene_expression("APOC1")

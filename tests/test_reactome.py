@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.reactome_mcp import server
+from servers.reactome_mcp import api
 from tests.helpers import HTTPTestCase
 
 
@@ -15,7 +15,7 @@ class ReactomeTests(HTTPTestCase):
             self.assertEqual(req.url.params["species"], "Homo sapiens")
             return httpx.Response(200, json={"results": [{"stId": "R-HSA-1"}], "rowCount": 4})
         with self.mock_http(handler):
-            self.assertEqual((await server.reactome_search("p53", limit=1, page=2))["data"]["rowCount"], 4)
+            self.assertEqual((await api.reactome_search("p53", limit=1, page=2))["data"]["rowCount"], 4)
 
     async def test_entry_and_local_lists(self):
         paths = []
@@ -23,27 +23,27 @@ class ReactomeTests(HTTPTestCase):
             paths.append(req.url.path)
             return httpx.Response(200, json={"stId": "R-HSA-1"} if "/query/" in req.url.path else [{"dbId": 1}, {"dbId": 2}])
         with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
-            self.assertEqual((await server.reactome_entry("R-HSA-1"))["data"]["stId"], "R-HSA-1")
-            for result in [await server.reactome_pathway_events("R-HSA-1", limit=1),
-                           await server.reactome_participants("R-HSA-1", limit=1),
-                           await server.reactome_pathways_for_gene("P04637", limit=1)]:
+            self.assertEqual((await api.reactome_entry("R-HSA-1"))["data"]["stId"], "R-HSA-1")
+            for result in [await api.reactome_pathway_events("R-HSA-1", limit=1),
+                           await api.reactome_participants("R-HSA-1", limit=1),
+                           await api.reactome_pathways_for_gene("P04637", limit=1)]:
                 self.assertTrue(result["truncated"])
                 self.assertEqual(result["pagination"], "local")
                 self.assertEqual(result["total"], 2)
         self.assertIn("/ContentService/data/mapping/UniProt/P04637/pathways", paths)
 
     async def test_validation_all_tools(self):
-        for func, args in [(server.reactome_search, {"query": ""}),
-                           (server.reactome_entry, {"reactome_id": "bad"}),
-                           (server.reactome_pathway_events, {"reactome_id": "R-HSA-1", "limit": 101}),
-                           (server.reactome_participants, {"reactome_id": "../"}),
-                           (server.reactome_pathways_for_gene, {"gene_id": "P04637", "resource": "unknown"})]:
+        for func, args in [(api.reactome_search, {"query": ""}),
+                           (api.reactome_entry, {"reactome_id": "bad"}),
+                           (api.reactome_pathway_events, {"reactome_id": "R-HSA-1", "limit": 101}),
+                           (api.reactome_participants, {"reactome_id": "../"}),
+                           (api.reactome_pathways_for_gene, {"gene_id": "P04637", "resource": "unknown"})]:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**args)
 
     async def test_error_and_empty(self):
         with self.mock_http(lambda req: httpx.Response(404)):
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.reactome_entry("R-HSA-1")
+                await api.reactome_entry("R-HSA-1")
         with self.mock_http(lambda req: httpx.Response(200, json=[])):
-            self.assertEqual((await server.reactome_participants("R-HSA-1"))["total"], 0)
+            self.assertEqual((await api.reactome_participants("R-HSA-1"))["total"], 0)

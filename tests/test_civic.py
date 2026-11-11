@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from servers.civic_mcp import server
+from servers.civic_mcp import api
 
 from tests.helpers import HTTPTestCase
 
@@ -79,58 +79,58 @@ class CivicTests(HTTPTestCase):
 
     async def test_success_responses(self):
         with self.mock():
-            search = await server.civic_search("BRAF", entity="VARIANT")
+            search = await api.civic_search("BRAF", entity="VARIANT")
             self.assertEqual(search["status"], "ok")
             self.assertEqual(search["source_url"], BASE)
             self.assertEqual(search["results"][1]["resultType"], "VARIANT")
-            gene = await server.civic_gene(gene_id="5")
+            gene = await api.civic_gene(gene_id="5")
             self.assertEqual(gene["data"]["gene"]["entrezId"], 673)
-            symbol = await server.civic_gene(entrez_symbol="BRAF")
+            symbol = await api.civic_gene(entrez_symbol="BRAF")
             self.assertEqual(symbol["data"]["gene"]["name"], "BRAF")
-            variants = await server.civic_gene_variants("5")
+            variants = await api.civic_gene_variants("5")
             self.assertEqual(variants["results"][0]["name"], "V600E")
             self.assertEqual(variants["totalCount"], 114)
             self.assertEqual(variants["end_cursor"], "Mg")
-            variant = await server.civic_variant("6")
+            variant = await api.civic_variant("6")
             self.assertEqual(variant["data"]["variant"]["feature"]["name"], "BRAF")
-            evidence = await server.civic_evidence_item("1")
+            evidence = await api.civic_evidence_item("1")
             self.assertEqual(evidence["data"]["evidenceItem"]["evidenceLevel"], "B")
-            listing = await server.civic_variant_evidence("6")
+            listing = await api.civic_variant_evidence("6")
             self.assertEqual(listing["results"][0]["therapies"][0]["name"], "Imatinib")
             self.assertEqual(listing["has_next_page"], True)
 
     async def test_validation_errors(self):
         with self.mock():
             with self.assertRaises(ValueError):
-                await server.civic_search("")
+                await api.civic_search("")
             with self.assertRaises(ValueError):
-                await server.civic_search("BRAF", entity="GENE")
+                await api.civic_search("BRAF", entity="GENE")
             with self.assertRaises(ValueError):
-                await server.civic_search("BRAF", limit=0)
+                await api.civic_search("BRAF", limit=0)
             with self.assertRaises(ValueError):
-                await server.civic_gene()
+                await api.civic_gene()
             with self.assertRaises(ValueError):
-                await server.civic_gene("5", "BRAF")
+                await api.civic_gene("5", "BRAF")
             with self.assertRaises(ValueError):
-                await server.civic_gene(gene_id="abc")
+                await api.civic_gene(gene_id="abc")
             with self.assertRaises(ValueError):
-                await server.civic_gene(entrez_symbol="BRAF; drop")
+                await api.civic_gene(entrez_symbol="BRAF; drop")
             with self.assertRaises(ValueError):
-                await server.civic_gene_variants("bad")
+                await api.civic_gene_variants("bad")
             with self.assertRaises(ValueError):
-                await server.civic_variant("6x")
+                await api.civic_variant("6x")
             with self.assertRaises(ValueError):
-                await server.civic_evidence_item("")
+                await api.civic_evidence_item("")
             with self.assertRaises(ValueError):
-                await server.civic_variant_evidence("-1")
+                await api.civic_variant_evidence("-1")
 
     async def test_http_error(self):
         with self.mock():
             with self.assertRaises(httpx.HTTPStatusError):
-                await server.civic_gene(gene_id=str(NOT_FOUND_ID))
+                await api.civic_gene(gene_id=str(NOT_FOUND_ID))
 
     async def test_graphql_error_response(self):
         with self.mock():
-            result = await server.civic_gene(entrez_symbol="ZZZZ")
+            result = await api.civic_gene(entrez_symbol="ZZZZ")
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["errors"][0]["message"], "not found")
