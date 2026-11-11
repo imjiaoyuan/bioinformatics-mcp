@@ -24,7 +24,7 @@ SERVERS = {
     "cbioportal": (6, "cbioportal_studies", {"limit": 0}),
     "cellxgene": (6, "cellxgene_versions", {"limit": 0}),
     "chembl": (6, "chembl_search", {}),
-    "cncb": (7, "cncb_genome", {}),
+    "cncb": (8, "cncb_genome", {}),
     "ena": (4, "ena_search", {}),
     "ensembl": (7, "ensembl_lookup", {}),
     "gdc": (6, "gdc_projects", {"limit": 0}),
