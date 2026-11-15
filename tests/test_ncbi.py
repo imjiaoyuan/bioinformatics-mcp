@@ -5,6 +5,7 @@ import json
 
 from servers.ncbi_mcp import api
 from tests.helpers import HTTPTestCase
+from common import http
 
 
 class GEOTests(HTTPTestCase):
@@ -274,3 +275,192 @@ class GEOTests(HTTPTestCase):
         with self.mock_http(lambda req: httpx.Response(500)):
             with self.assertRaises(httpx.HTTPStatusError):
                 await api.geo_record("GSE1")
+
+
+_PUT_HTML = """
+<html><body>
+    <p>QBlastInfoBegin
+    Status=READY
+    QBlastInfoEnd</p>
+    RID = FJW4U2V8014
+    RTOE = 14
+</body></html>
+"""
+
+_STATUS_HTML = """
+<p><!--
+QBlastInfoBegin
+\tStatus={status}
+QBlastInfoEnd
+--></p>
+"""
+
+_JSON_RESULTS = json.dumps({
+    "BlastOutput2": [{
+        "report": {"program": "blastp", "version": "2.16.0+"},
+        "results": {"search": {"query_id": "Query_1", "query_len": 34, "hits": [
+            {"num": 1, "description": [{"id": "sp|P02649|APOA1_HUMAN", "accession": "P02649",
+                                        "title": "Apolipoprotein A-I OS=Homo sapiens",
+                                        "taxid": 9606, "sci_name": "Homo sapiens"}],
+             "hsps": [{"score": 120, "evalue": 1.2e-30, "identity": 30, "positive": 32,
+                       "gaps": 0, "bitscore": 250, "query_from": 1, "query_to": 34,
+                       "hit_from": 10, "hit_to": 43}]},
+        ]}},
+    }],
+})
+
+
+def _blast_router(status="READY", results_body="", put_body=_PUT_HTML):
+    def handler(request):
+        if "blast.ncbi.nlm.nih.gov" not in request.url.host:
+            raise AssertionError("BLAST tools must only contact blast.ncbi.nlm.nih.gov")
+        params = request.url.params
+        if request.content and b"CMD=Put" in request.content or params.get("CMD") == "Put":
+            return httpx.Response(200, text=put_body)
+        if params.get("CHECK_STATUS") == "yes":
+            return httpx.Response(200, text=_STATUS_HTML.format(status=status))
+        return httpx.Response(200, text=results_body)
+    return handler
+
+
+class BlastTests(HTTPTestCase):
+    async def test_submit_parses_rid_and_rtoe(self):
+        def handler(request):
+            from urllib.parse import parse_qsl
+            self.assertEqual(dict(parse_qsl(request.content.decode())),
+                             {"CMD": "Put", "PROGRAM": "blastp", "DATABASE": "swissprot",
+                              "QUERY": "mkvlwaallvtflagcipakfqrsalgkavdlek", "EMAIL": "a@example.org"})
+            return httpx.Response(200, text=_PUT_HTML)
+
+        with self.mock_http(handler):
+            result = await api.blast_submit("mkvlwaallvtflagcipakfqrsalgkavdlek",
+                                            email="a@example.org")
+        self.assertEqual(result["rid"], "FJW4U2V8014")
+        self.assertEqual(result["rtoe_seconds"], 14)
+        self.assertEqual(result["program"], "blastp")
+        self.assertEqual(result["database"], "swissprot")
+        self.assertIn("once per minute", result["note"])
+
+    async def test_submit_error_page(self):
+        body = "<html>Message ID#UnknownRID <p>Bad request</p></html>"
+        with self.mock_http(_blast_router(put_body=body)):
+            with self.assertRaisesRegex(RuntimeError, "Message ID"):
+                await api.blast_submit("MKVLWAALLVTFLAGCIPAKFQRSALGKAVDLEK", email="a@example.org")
+
+    async def test_submit_unexpected_response(self):
+        with self.mock_http(_blast_router(put_body="<html>thank you</html>")):
+            with self.assertRaisesRegex(RuntimeError, "unexpected response"):
+                await api.blast_submit("MKVLWAALLVTFLAGCIPAKFQRSALGKAVDLEK", email="a@example.org")
+
+    async def test_submit_requires_email(self):
+        with patch.dict("os.environ", {}, clear=False):
+            import os
+            os.environ.pop("NCBI_EMAIL", None)
+            with self.assertRaises(ValueError):
+                await api.blast_submit("MKVLWAALLVTFLAGCIPAKFQRSALGKAVDLEK")
+
+    async def test_submit_validation(self):
+        with self.assertRaises(ValueError):
+            await api.blast_submit("MKVLWAALLVTFLAGCIPAKFQRSALGKAVDLEK", program="blat",
+                                   email="a@example.org")
+        with self.assertRaises(ValueError):
+            await api.blast_submit("MKVLWAALLVTFLAGCIPAKFQRSALGKAVDLEK", database="genome",
+                                   email="a@example.org")
+        with self.assertRaises(ValueError):
+            await api.blast_submit("MKVLWAALLVTFLAGCIPAKFQRSALGKAVDLEK", program="blastn",
+                                   email="a@example.org")  # protein query, nucleotide db mismatch -> nt is nucleotide db
+        with self.assertRaises(ValueError):
+            await api.blast_submit("MKVLWAALLVTFLAGCIPAKFQRSALGKAVDLEK1@2#3", email="a@example.org")
+        with self.assertRaises(ValueError):
+            await api.blast_submit("ACGTACGTAC", program="blastn", database="nr",
+                                   email="a@example.org")  # blastn needs a nucleotide database
+        with self.assertRaises(ValueError):
+            await api.blast_submit("MKVLWAALLVTFLAGCIPAKFQRSALGKAVDLEK", program="blastx",
+                                   database="nr", email="a@example.org")  # blastx needs a nucleotide query
+        with self.assertRaises(ValueError):
+            # ACGT is also valid protein alphabet, so use digits to force the error.
+            await api.blast_submit("123456789012", program="tblastn", database="nt",
+                                   email="a@example.org")
+
+    async def test_submit_nucleotide_program(self):
+        def handler(request):
+            from urllib.parse import parse_qsl
+            body = dict(parse_qsl(request.content.decode()))
+            self.assertEqual(body["PROGRAM"], "blastn")
+            self.assertEqual(body["QUERY"], "acg tac gta cgt acg tac".replace(" ", ""))
+            return httpx.Response(200, text=_PUT_HTML)
+
+        with self.mock_http(handler):
+            result = await api.blast_submit("acg tac gta cgt acg tac", program="blastn",
+                                            database="nt", email="a@example.org")
+        self.assertEqual(result["rid"], "FJW4U2V8014")
+
+    async def test_status_states(self):
+        for state in ("WAITING", "READY", "FAILED", "UNKNOWN"):
+            with self.subTest(state=state):
+                def handler(request):
+                    self.assertEqual(request.url.params.get("CHECK_STATUS"), "yes")
+                    self.assertEqual(request.url.params.get("RID"), "FJW4U2V8014")
+                    return httpx.Response(200, text=_STATUS_HTML.format(status=state))
+
+                http._last_request.clear()
+                with self.mock_http(handler):
+                    result = await api.blast_status("FJW4U2V8014")
+                self.assertEqual(result["status"], state)
+                if state in {"WAITING", "UNKNOWN"}:
+                    self.assertEqual(result["retry_after_seconds"], 60)
+
+    async def test_status_rid_validation(self):
+        with self.assertRaises(ValueError):
+            await api.blast_status("rid!bad")
+        with self.assertRaises(ValueError):
+            await api.blast_status("short")
+
+    async def test_results_waiting_returns_retry_hint(self):
+        http._last_request.clear()
+        with self.mock_http(_blast_router(status="WAITING", results_body=_STATUS_HTML.format(status="WAITING"))):
+            result = await api.blast_results("FJW4U2V8014")
+        self.assertEqual(result["status"], "waiting")
+        self.assertEqual(result["retry_after_seconds"], 60)
+
+    async def test_results_json_shape(self):
+        http._last_request.clear()
+        with self.mock_http(_blast_router(results_body=_JSON_RESULTS)):
+            result = await api.blast_results("FJW4U2V8014", format="json")
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(result["returned"], 1)
+        hit = result["hits"][0]
+        self.assertEqual(hit["hit_id"], "P02649")
+        self.assertIn("Apolipoprotein", hit["hit_def"])
+        self.assertEqual(hit["organism"], "Homo sapiens")
+        hsp = hit["hit_hsps"][0]
+        self.assertEqual(hsp["score"], 120)
+        self.assertEqual(hsp["evalue"], 1.2e-30)
+        self.assertEqual(hsp["identity"], 30)
+        self.assertEqual(hsp["bitscore"], 250)
+
+    async def test_results_text_verbatim(self):
+        report = "Sequences producing significant alignments: ...\nAlignment lines"
+        http._last_request.clear()
+        with self.mock_http(_blast_router(results_body=report)):
+            result = await api.blast_results("FJW4U2V8014")
+        self.assertEqual(result["content"], report)
+        self.assertFalse(result["truncated"])
+
+    async def test_results_no_hits_found(self):
+        http._last_request.clear()
+        with self.mock_http(_blast_router(results_body="<pre>No hits found</pre>")):
+            result = await api.blast_results("FJW4U2V8014")
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(result["hits"], [])
+        self.assertTrue(result["no_hits"])
+
+    async def test_results_validation(self):
+        with self.assertRaises(ValueError):
+            await api.blast_results("FJW4U2V8014", format="xml")
+        with self.assertRaises(ValueError):
+            await api.blast_results("FJW4U2V8014", alignments=0)
+        with self.assertRaises(ValueError):
+            await api.blast_results("FJW4U2V8014", alignments=101)
+        with self.assertRaises(ValueError):
+            await api.blast_results("FJW4U2V8014", descriptions=501)

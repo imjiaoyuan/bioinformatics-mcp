@@ -20,6 +20,7 @@ from urllib.parse import urljoin
 from urllib.parse import quote
 
 from common.http import bounded, identifier, identifiers, request, text
+from common.api import choice
 from common.ena import RUN_FIELDS as ENA_RUN_FIELDS, files_from_record
 from common.geo import soft_samples
 from common.cncb import search_payload
@@ -994,6 +995,205 @@ async def geo_metadata(accessions: list[str], limit: int = 500) -> dict[str, Any
             "truncated": len(rows) >= limit}
 
 
+# NCBI BLAST URL API (Blast.cgi). Policy: at most one request every ~10 s per
+# host (enforced via the shared request() pacing below) and no more than 100
+# searches/day without signing up; poll at most once per minute.
+BLAST_URL = "https://blast.ncbi.nlm.nih.gov/Blast.cgi"
+BLAST_PROGRAMS = {"blastp", "blastn", "blastx", "tblastn", "tblastx"}
+BLAST_DATABASES = {
+    "swissprot", "nr", "nt", "refseq_rna", "refseq_protein", "refseq_genomic",
+    "pdb", "pataa", "patnt", "env_nr", "env_nt",
+}
+_BLAST_PROTEIN_DBS = {"swissprot", "nr", "refseq_protein", "pdb", "pataa", "env_nr"}
+_BLAST_PROTEIN_DB_PROGRAMS = {"blastp", "blastx"}
+_BLAST_PROTEIN = set("ACDEFGHIKLMNPQRSTVWYUBZJXO*-.") | set("acdefghiklmnpqrstvwyubzjxo*-.")
+_BLAST_NUCLEOTIDE = set("ACGTUNRYKMSWBDHVN*-.") | set("acgtunrykmswbdhvn*-.")
+_BLAST_INTERVAL = 11.0  # seconds between blast.ncbi.nlm.nih.gov requests
+
+
+async def _blast_call(params: dict[str, str]) -> httpx.Response:
+    """POST one form-encoded Blast.cgi request with NCBI's 10 s pacing."""
+    return await request("POST", BLAST_URL, data=params, interval=_BLAST_INTERVAL, retryable=True)
+
+
+def _blast_rid(rid: str) -> str:
+    # RIDs are case-sensitive per NCBI; never lower-case them.
+    return identifier(rid, r"[A-Za-z0-9]{10,15}", "BLAST RID")
+
+
+def _blast_sequence(sequence: str, program: str) -> str:
+    raw = text(sequence, "sequence", 65536)
+    cleaned = "".join(raw.split())
+    alphabet = _BLAST_PROTEIN if program in {"blastp", "tblastn"} else _BLAST_NUCLEOTIDE
+    invalid = {c for c in cleaned.upper() if c not in alphabet}
+    if invalid:
+        kind = "protein" if program in {"blastp", "tblastn"} else "nucleotide"
+        raise ValueError(f"sequence contains characters {sorted(invalid)} invalid for a "
+                         f"{kind} BLAST {program} query")
+    if len(cleaned) < 10:
+        raise ValueError("sequence must contain at least 10 residues")
+    return cleaned
+
+
+def _blast_error(body: str, context: str) -> RuntimeError:
+    marker = re.search(r"Message ID#?\s*[:=]?\s*([A-Za-z0-9._-]+)", body)
+    snippet = " ".join(body.split())[:300]
+    return RuntimeError(f"NCBI BLAST {context} failed"
+                        + (f" (Message ID {marker.group(1)})" if marker else "")
+                        + f"; unexpected response: {snippet}")
+
+
+def _blast_status_of(body: str) -> str:
+    found = re.search(r"Status\s*=\s*(WAITING|UNKNOWN|READY|FAILED)", body)
+    return found.group(1) if found else "UNKNOWN"
+
+
+async def blast_submit(
+    sequence: str,
+    program: str = "blastp",
+    database: str = "swissprot",
+    email: str | None = None,
+    job_title: str = "",
+) -> dict[str, Any]:
+    """Submit one sequence to NCBI BLAST (Blast.cgi CMD=Put) and return its RID.
+
+    Args:
+        sequence: Raw sequence. blastp/tblastn need a protein alphabet;
+            blastn/blastx/tblastx need a nucleotide alphabet.
+        program: blastp, blastn, blastx, tblastn, or tblastx.
+        database: swissprot, nr, nt, refseq_rna, refseq_protein,
+            refseq_genomic, pdb, pataa, patnt, env_nr, or env_nt.
+        email: Contact address included with the submission (BLAST policy);
+            defaults to the NCBI_EMAIL environment variable.
+        job_title: Optional label shown on the result page.
+
+    NCBI limits the URL API to about one request every 10 seconds and
+    forbids more than 100 searches per day without sign-up. Do NOT poll
+    more often than once per minute: wait roughly rtoe_seconds after this
+    call, then check blast_status(rid) before calling blast_results(rid).
+    Results expire after about 24 hours. The RID is case-sensitive.
+    """
+    program = choice(program, BLAST_PROGRAMS, "program")
+    database = choice(database, BLAST_DATABASES, "database")
+    protein_db = database in _BLAST_PROTEIN_DBS
+    needs_protein_db = program in _BLAST_PROTEIN_DB_PROGRAMS
+    if protein_db != needs_protein_db:
+        raise ValueError(f"program {program} requires a "
+                         f"{'protein' if needs_protein_db else 'nucleotide'} database; "
+                         f"choose from {sorted(_BLAST_PROTEIN_DBS if needs_protein_db else BLAST_DATABASES - _BLAST_PROTEIN_DBS)}")
+    cleaned = _blast_sequence(sequence, program)
+    contact = email or os.getenv("NCBI_EMAIL")
+    if not contact:
+        raise ValueError("email is required for BLAST submissions; pass email or set NCBI_EMAIL")
+    params: dict[str, str] = {"CMD": "Put", "PROGRAM": program, "DATABASE": database,
+                              "QUERY": cleaned, "EMAIL": contact}
+    if job_title:
+        params["JOB_TITLE"] = text(job_title, "job_title", 200)
+    response = await _blast_call(params)
+    body = response.text
+    rid = re.search(r"^\s+RID\s*=\s*([A-Za-z0-9]+)\s*$", body, re.M)
+    rtoe = re.search(r"^\s+RTOE\s*=\s*([0-9]+)\s*$", body, re.M)
+    if not rid or "Message ID#" in body:
+        raise _blast_error(body, "submission")
+    rtoe_seconds = int(rtoe.group(1)) if rtoe else None
+    return {"rid": rid.group(1), "rtoe_seconds": rtoe_seconds,
+            "submit_url": BLAST_URL, "program": program, "database": database,
+            "sequence_length": len(cleaned),
+            "note": f"NCBI policy: poll at most once per minute; wait ~"
+                    f"{rtoe_seconds if rtoe_seconds else 60} seconds (rtoe) then check "
+                    f"blast_status, and fetch results with blast_results(rid). "
+                    f"NCBI allows ~1 request per 10 s and at most 100 searches/day without sign-up."}
+
+
+async def blast_status(rid: str) -> dict[str, Any]:
+    """Return the BLAST job status (WAITING/READY/UNKNOWN/FAILED) without alignments.
+
+    Uses the lightweight CMD=Get&CHECK_STATUS=yes probe, which returns only
+    Status and no alignments. NCBI policy: poll at most once per minute.
+    """
+    rid = _blast_rid(rid)
+    response = await request("GET", BLAST_URL,
+                             params={"CMD": "Get", "RID": rid, "CHECK_STATUS": "yes"},
+                             interval=_BLAST_INTERVAL)
+    body = response.text
+    status = _blast_status_of(body)
+    if "Message ID#" in body and status == "UNKNOWN":
+        raise _blast_error(body, "status")
+    result: dict[str, Any] = {"rid": rid, "status": status, "status_url":
+                              BLAST_URL + "?" + urlencode({"CMD": "Get", "RID": rid, "CHECK_STATUS": "yes"})}
+    if status in {"WAITING", "UNKNOWN"}:
+        result["retry_after_seconds"] = 60
+    return result
+
+
+_BLAST_FORMAT_TYPES = {"text": "Text", "html": "HTML", "json": "JSON2_S"}
+
+
+async def blast_results(
+    rid: str,
+    format: str = "text",
+    alignments: int = 5,
+    descriptions: int = 10,
+) -> dict[str, Any]:
+    """Fetch BLAST results for an RID; never blocks or sleeps server-side.
+
+    Args:
+        format: text (plain alignment report), html, or json (parsed hits).
+            NCBI's Blast.cgi serves JSON as FORMAT_TYPE=JSON2_S, the single
+            query JSON2 dialect; it only applies once the job is READY.
+        alignments: Aligned pairs to return, 1-100 (default 5).
+        descriptions: One-line descriptions, 1-500 per NCBI policy (default 10).
+
+    Returns {rid, status: "waiting", retry_after_seconds} while the job runs
+    (call blast_status first; poll at most once per minute), an explicit
+    empty result with no_hits=true when READY but "No hits found", or the
+    alignment content (text/html verbatim, byte-bounded) or parsed hits
+    (json) with status "ready". UNKNOWN means the RID expired or never
+    existed (results last ~24 hours; RIDs are case-sensitive).
+    """
+    rid = _blast_rid(rid)
+    format = choice(format, set(_BLAST_FORMAT_TYPES), "format")
+    alignments = bounded(alignments, 100, "alignments")
+    descriptions = bounded(descriptions, 500, "descriptions")
+    response = await request("GET", BLAST_URL,
+                             params={"CMD": "Get", "RID": rid, "FORMAT_TYPE": _BLAST_FORMAT_TYPES[format],
+                                     "ALIGNMENTS": alignments, "DESCRIPTIONS": descriptions},
+                             interval=_BLAST_INTERVAL, max_bytes=16_000_000)
+    body = response.text
+    if "Status=WAITING" in body or "Status=UNKNOWN" in body:
+        return {"rid": rid, "status": "unknown" if "Status=UNKNOWN" in body else "waiting",
+                "retry_after_seconds": 60,
+                "note": "Job is not ready (or RID expired); poll blast_status at most once per minute."}
+    if "No hits found" in body:
+        return {"rid": rid, "status": "ready", "format": format, "hits": [], "no_hits": True,
+                "note": "NCBI reported 'No hits found' for this search."}
+    if format == "json":
+        try:
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            raise ValueError("BLAST returned non-JSON content; the job may still be formatting")
+        hits = []
+        for output in data.get("BlastOutput2", []):
+            for hit in output.get("results", {}).get("search", {}).get("hits", []):
+                head = (hit.get("description") or [{}])[0]
+                hits.append({
+                    "hit_id": head.get("accession") or head.get("id", ""),
+                    "hit_def": head.get("title", ""),
+                    "organism": head.get("sci_name"),
+                    "hit_hsps": [{key: hsp.get(key) for key in
+                                  ("score", "evalue", "identity", "positive", "gaps",
+                                   "bitscore", "query_from", "query_to", "hit_from", "hit_to")}
+                                 for hsp in hit.get("hsps", [])],
+                })
+        return {"rid": rid, "status": "ready", "format": "json", "hits": hits,
+                "returned": len(hits), "results_url":
+                BLAST_URL + "?" + urlencode({"CMD": "Get", "RID": rid, "FORMAT_TYPE": "Text"})}
+    limit = 400_000
+    return {"rid": rid, "status": "ready", "format": format, "content": body[:limit],
+            "truncated": len(body) > limit, "results_url":
+            BLAST_URL + "?" + urlencode({"CMD": "Get", "RID": rid, "FORMAT_TYPE": _BLAST_FORMAT_TYPES[format]})}
+
+
 def databases() -> str:
     """List databases supported by this server."""
     return json.dumps(sorted(ALLOWED_DATABASES))
@@ -1014,6 +1214,9 @@ TOOLS = (
     geo_files,
     download_plan,
     geo_metadata,
+    blast_submit,
+    blast_status,
+    blast_results,
 )
 
 
