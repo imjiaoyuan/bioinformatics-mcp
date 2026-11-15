@@ -31,7 +31,8 @@ def _api_module(name: str, *tools) -> ModuleType:
 
 class BuildEntriesTests(unittest.TestCase):
     def test_uvx_entries_pin_the_requested_ref(self):
-        entries = cli.build_entries(["ensembl"], serve=False, uvx=True, ref="v0.2.0")
+        entries = cli.build_entries(["ensembl"], serve=False, uvx=True, ref="v0.2.0",
+                                    ensure_uvx=lambda: None)
         self.assertEqual(entries["ensembl"]["args"],
                          ["--from", cli.SOURCE + "@v0.2.0", "ensembl-mcp"])
 

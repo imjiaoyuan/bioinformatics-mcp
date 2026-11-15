@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from importlib.metadata import distribution
 import json
 import os
@@ -50,7 +51,7 @@ def ensure_uvx() -> None:
 
 
 def build_entries(selected: list[str], *, serve: bool, uvx: bool, ref: str | None = None,
-                  name: str = "bioinformatics") -> dict[str, dict]:
+                  name: str = "bioinformatics", ensure_uvx: Callable[[], None] = ensure_uvx) -> dict[str, dict]:
     source = SOURCE if ref is None else f"{SOURCE}@{ref}"
     if serve:
         if uvx:
