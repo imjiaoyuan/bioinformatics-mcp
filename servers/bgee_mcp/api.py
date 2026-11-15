@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from common.api import json_response, page
-from common.http import identifier, text
+from common.http import bounded, identifier, text
 
 ENDPOINT = "https://www.bgee.org/sparql"
 
@@ -35,12 +35,13 @@ def _species_clause(species: str | None) -> str:
 
 
 async def _query(select: str, where: str, limit: int, offset: int) -> dict:
+    paging = page(limit, offset)
     query = f"{PREFIXES}SELECT DISTINCT {select} WHERE {{ {where} }} LIMIT {limit} OFFSET {offset}"
     data, source = await json_response(
         ENDPOINT, {"query": query, "format": "application/sparql-results+json"})
     rows = [{variable: bound["value"] for variable, bound in binding.items()}
             for binding in data.get("results", {}).get("bindings", [])]
-    return {**source, "sparql": query, "results": rows, **page(limit, offset)}
+    return {**source, "sparql": query, "results": rows, **paging}
 
 
 async def bgee_species(limit: int = 20, offset: int = 0) -> dict:
