@@ -13,14 +13,15 @@ import re
 CATEGORIES: dict[int, tuple[str, tuple[str, ...]]] = {
     1: ("Sequence and genome annotation", (
         "ncbi", "ena", "ensembl", "sra", "cncb", "ucsc", "vep", "mygene",
-        "hgnc", "taxonomy", "variation", "encode")),
+        "hgnc", "taxonomy", "variation", "encode", "datasets")),
     2: ("Protein and structure", (
         "uniprot", "pdb", "pdbe", "alphafold", "emdb", "interpro")),
     3: ("Pathways, networks and enrichment", (
         "kegg", "reactome", "string", "intact", "biogrid", "gprofiler",
         "msigdb", "quickgo", "bigg")),
     4: ("Expression and single cell", (
-        "gtex", "hpa", "bgee", "panglao", "cellxgene", "singlecell")),
+        "gtex", "hpa", "bgee", "panglao", "cellxgene", "singlecell",
+        "expressionatlas")),
     5: ("Disease, clinical and drug", (
         "gdc", "cbioportal", "depmap", "civic", "clinvar", "disgenet",
         "mondo", "hpo", "pharmgkb", "opentargets", "gwas", "chembl",

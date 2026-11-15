@@ -75,6 +75,8 @@ SERVERS = {
     "alliance": (6, "alliance_gene", {}),
     "clinicaltrials": (2, "trial_study", {"nct_id": "bad"}),
     "mesh": (3, "mesh_lookup", {"limit": 0}),
+    "expressionatlas": (2, "atlas_experiment", {"accession": "bad"}),
+    "datasets": (4, "dataset_assembly", {"accession": "bad"}),
 }
 
 

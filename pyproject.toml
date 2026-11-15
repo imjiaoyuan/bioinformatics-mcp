@@ -70,6 +70,8 @@ pubchem-mcp = "servers.pubchem_mcp.server:main"
 alliance-mcp = "servers.alliance_mcp.server:main"
 clinicaltrials-mcp = "servers.clinicaltrials_mcp.server:main"
 mesh-mcp = "servers.mesh_mcp.server:main"
+expressionatlas-mcp = "servers.expressionatlas_mcp.server:main"
+datasets-mcp = "servers.datasets_mcp.server:main"
 
 [build-system]
 requires = ["hatchling>=1.32,<2"]

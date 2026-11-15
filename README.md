@@ -182,6 +182,8 @@ record = await uniprot_entry("P12345")
 | `pubchem-mcp` | PubChem compounds, synonyms, descriptions, assays and annotations |
 | `clinicaltrials-mcp` | ClinicalTrials.gov v2 study search and detail with cursor paging |
 | `mesh-mcp` | MeSH descriptor lookup, entry details and tree positions |
+| `expressionatlas-mcp` | EBI Expression Atlas experiment catalog and details |
+| `datasets-mcp` | NCBI Datasets v2 assembly, gene and taxonomy metadata reports |
 | `alliance-mcp` | Alliance of Genome Resources genes, phenotypes and orthologs (FlyBase, WormBase, MGI, SGD, ZFIN, RGD) |
 
 #### Selecting providers by category number
@@ -199,7 +201,7 @@ The base install uses the official MCP Python SDK v2 (`mcp>=2,<3`), with
 `MCPServer` for provider and aggregated servers. Servers accept both legacy
 initialize-based clients and v2 discovery-based clients.
 
-The base install supplies all 55 commands and works on Python 3.10 through
+The base install supplies all 57 commands and works on Python 3.10 through
 3.14. `cellxgene-mcp` follows the same baseline: version listings, dataset
 search and H5AD URLs are served from public REST APIs with no extra
 dependencies. Only the cell-level Census tools (`cellxgene_cells`,
@@ -746,6 +748,20 @@ details for descriptors/qualifiers/supplementary concepts (D/Q/C ids) and
 tree positions via SPARQL. Literature term mapping complements
 `publications-mcp`.
 
+`expressionatlas-mcp` queries the EBI Expression Atlas JSON API: the
+experiment catalog (fetched once per process and filtered locally by
+species, assay type or free text — 4500+ experiments including plants) and
+per-experiment details with factors and replicate summaries. The upstream
+gene-level expression endpoint no longer exists, so gene-expression tools
+are intentionally absent; baseline expression remains in `gtex-mcp`
+(human), `bgee-mcp` (animals) and `hpa-mcp` (human).
+
+`datasets-mcp` reads NCBI Datasets v2 metadata reports: genome assemblies
+per taxon with RefSeq/GenBank and assembly-level filters, single assembly
+reports, gene reports by symbol or id (whole-taxon gene dumps are refused
+by design), and taxonomy reports. Downloads stay out of scope — metadata
+reports only.
+
 Sources deliberately not integrated: the eQTL Catalogue REST API is deprecated
 (HTTP 410; FTP/tabix downloads only, outside this project's no-download scope)
 and the GWAS Atlas host is unreachable, so `eqtl-mcp` was dropped; GWAS trait
@@ -782,7 +798,7 @@ python -m pip check
 ```
 
 Regression tests use mocked HTTP/SDK responses and need no network or API keys.
-Transport tests start all 55 installed console scripts from temporary working
+Transport tests start all 57 installed console scripts from temporary working
 directories, initialize stdio connections, discover tools and check validation
 responses without contacting providers. Local-only PDB/CNCB tools also exercise
 successful responses. The registered command list and tool counts are asserted
@@ -801,7 +817,7 @@ in any Python 3.10-3.13 environment.
   TileDB-SOMA wheel, verifies imports and runs the full suite including local SOMA.
 - A Python 3.12 packaging job builds an sdist and a wheel from that sdist, checks
   metadata with Twine, then installs each artifact into its own clean venv and
-  exercises all 55 installed MCP commands outside the source checkout.
+  exercises all 57 installed MCP commands outside the source checkout.
 
 Run the packaging checks locally with:
 
