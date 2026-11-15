@@ -65,6 +65,10 @@ SERVERS = {
     "bgee": (6, "bgee_gene_expression", {}),
     "pdbe": (7, "pdbe_entry_summary", {}),
     "msigdb": (4, "msigdb_gene_set", {}),
+    "variation": (5, "variation_entry", {}),
+    "taxonomy": (5, "taxon_search", {}),
+    "encode": (5, "encode_search", {}),
+    "metagenomics": (5, "mgrast_project", {}),
 }
 
 

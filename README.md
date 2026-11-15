@@ -173,12 +173,16 @@ record = await uniprot_entry("P12345")
 | `bgee-mcp` | Bgee gene expression by anatomical entity and species |
 | `pdbe-mcp` | PDBe SIFTS mappings and PDBe-KB aggregated entry summaries |
 | `msigdb-mcp` | MSigDB gene set details, members and collection catalog |
+| `variation-mcp` | Ensembl Variation rsID summaries and NCBI dbSNP lookup/search |
+| `taxonomy-mcp` | NCBI Taxonomy lookup/search/children and GBIF backbone matching |
+| `encode-mcp` | ENCODE Portal experiment, file, biosample-type and target metadata |
+| `metagenomics-mcp` | MG-RAST projects, metagenomes, samples and annotation profiles |
 
 The base install uses the official MCP Python SDK v2 (`mcp>=2,<3`), with
 `MCPServer` for provider and aggregated servers. Servers accept both legacy
 initialize-based clients and v2 discovery-based clients.
 
-The base install supplies all 45 commands and works on Python 3.10 through
+The base install supplies all 49 commands and works on Python 3.10 through
 3.14. `cellxgene-mcp` follows the same baseline: version listings, dataset
 search and H5AD URLs are served from public REST APIs with no extra
 dependencies. Only the cell-level Census tools (`cellxgene_cells`,
@@ -233,6 +237,8 @@ Servers read configuration directly from their process environment:
 | `BIOC_VERSION` | `bioconductor-mcp` | No | Bioconductor release (default `3.21`) |
 | `NCBI_EMAIL` | `sra-mcp`, `clinvar-mcp` | Yes | Entrez contact address |
 | `NCBI_API_KEY` | `sra-mcp`, `clinvar-mcp` | No | Higher request rates |
+| `NCBI_EMAIL` | `variation-mcp` (dbSNP tools), `taxonomy-mcp` (NCBI tools) | Yes | Entrez contact address |
+| `NCBI_API_KEY` | `variation-mcp`, `taxonomy-mcp` | No | Higher request rates |
 | `BIOGRID_API_KEY` | `biogrid-mcp` | Yes | Free key from webservice.thebiogrid.org registration |
 | `DISGENET_API_KEY` | `disgenet-mcp` | Yes | Free academic key from DisGeNET registration |
 
@@ -659,11 +665,45 @@ Single Cell Portal study, sample and file metadata; no data download starts.
 upstream keyword search and collection browsing require a login, so collections
 are served from a curated static catalog and no fake search tool is provided.
 
+### Variation, taxonomy, ENCODE and metagenomics
+
+`variation-mcp` reads Ensembl Variation rsID summaries (consequence, clinical
+significance, MAF, per-assembly coordinates) and queries NCBI dbSNP through
+E-utilities (`dbsnp_summary`, `dbsnp_search`). Ensembl population frequencies
+are exposed by `variation_populations`; note that the upstream API currently
+returns an empty `populations` list while Ensembl reprocesses this data —
+the tool will populate automatically when the upstream field is restored.
+
+`taxonomy-mcp` covers NCBI Taxonomy lookup, search and direct children (the
+children query uses `txid{id}[Organism:exp]` and subtracts the parent locally)
+plus GBIF backbone matching and species detail; GBIF calls need no
+credentials. Both NCBI-backed providers require `NCBI_EMAIL` and honour
+`NCBI_API_KEY`.
+
+`encode-mcp` queries the ENCODE Portal (JSON REST, no key). Search pagination
+is local because the upstream search endpoint rejects `start`; fetches are
+byte-bounded and truncation is flagged. Most released ENCODE data is CC0, but
+the portal's data-use policy asks users to cite
+[the portal](https://www.encodeproject.org/about/data-use-policy/).
+
+`metagenomics-mcp` reads MG-RAST projects, metagenomes, samples and
+per-read annotation profiles. Anonymous access only: nonexistent resources
+return explicit errors distinct from private ones, and a 10 MB annotation
+stream bound is documented rather than silently truncated.
+
 Sources deliberately not integrated: the eQTL Catalogue REST API is deprecated
 (HTTP 410; FTP/tabix downloads only, outside this project's no-download scope)
 and the GWAS Atlas host is unreachable, so `eqtl-mcp` was dropped; GWAS trait
 metadata remains available through `gwas-mcp`. DrugBank, OMIM, MetaCyc, VMH and
 CellMarker have no stable free API or restrict redistribution by license.
+Model-organism specialists were surveyed in November 2026 and also excluded:
+the FlyBase REST API (`api.flybase.org`) is retired and returns HTML, FlyMine
+is unreachable, and WormBase is behind a Cloudflare challenge with no public
+widget access; plant specialists RAP-DB, TAIR (Araport) and MGI expose no
+stable public REST API. Plant gene queries remain covered by `ensembl-mcp`
+(Ensembl Plants) and `uniprot_function` with a `taxon_id`; Drosophila and
+C. elegans gene data are reachable through `uniprot-mcp`, `string-mcp` and
+`intact-mcp`. NCBI Taxonomy and GBIF taxonomy are now served by `taxonomy-mcp`.
 
 ## Development
 
@@ -682,7 +722,7 @@ python -m pip check
 ```
 
 Regression tests use mocked HTTP/SDK responses and need no network or API keys.
-Transport tests start all 45 installed console scripts from temporary working
+Transport tests start all 49 installed console scripts from temporary working
 directories, initialize stdio connections, discover tools and check validation
 responses without contacting providers. Local-only PDB/CNCB tools also exercise
 successful responses. The registered command list and tool counts are asserted
@@ -701,7 +741,7 @@ in any Python 3.10-3.13 environment.
   TileDB-SOMA wheel, verifies imports and runs the full suite including local SOMA.
 - A Python 3.12 packaging job builds an sdist and a wheel from that sdist, checks
   metadata with Twine, then installs each artifact into its own clean venv and
-  exercises all 45 installed MCP commands outside the source checkout.
+  exercises all 49 installed MCP commands outside the source checkout.
 
 Run the packaging checks locally with:
 

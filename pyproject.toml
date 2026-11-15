@@ -60,6 +60,10 @@ bigg-mcp = "servers.bigg_mcp.server:main"
 bgee-mcp = "servers.bgee_mcp.server:main"
 pdbe-mcp = "servers.pdbe_mcp.server:main"
 msigdb-mcp = "servers.msigdb_mcp.server:main"
+variation-mcp = "servers.variation_mcp.server:main"
+taxonomy-mcp = "servers.taxonomy_mcp.server:main"
+encode-mcp = "servers.encode_mcp.server:main"
+metagenomics-mcp = "servers.metagenomics_mcp.server:main"
 
 [build-system]
 requires = ["hatchling>=1.32,<2"]
