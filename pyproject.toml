@@ -64,6 +64,7 @@ variation-mcp = "servers.variation_mcp.server:main"
 taxonomy-mcp = "servers.taxonomy_mcp.server:main"
 encode-mcp = "servers.encode_mcp.server:main"
 metagenomics-mcp = "servers.metagenomics_mcp.server:main"
+phytozome-mcp = "servers.phytozome_mcp.server:main"
 
 [build-system]
 requires = ["hatchling>=1.32,<2"]

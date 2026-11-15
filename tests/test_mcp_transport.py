@@ -69,6 +69,7 @@ SERVERS = {
     "taxonomy": (5, "taxon_search", {}),
     "encode": (5, "encode_search", {}),
     "metagenomics": (5, "mgrast_project", {}),
+    "phytozome": (5, "phytozome_organisms", {"limit": 0}),
 }
 
 
