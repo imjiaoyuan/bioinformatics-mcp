@@ -144,3 +144,47 @@ class AggregationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(names), 7)
         self.assertIn("alphafold_prediction", names)
         self.assertIn("pdb_download_url", names)
+
+
+class NumberedSelectionTests(unittest.TestCase):
+    def invoke(self, *arguments):
+        output = io.StringIO()
+        with redirect_stdout(output):
+            cli.main(list(arguments))
+        return output.getvalue()
+
+    def test_list_groups_providers_with_numbers_and_env_hints(self):
+        output = self.invoke("list")
+        self.assertIn("1. Sequence and genome annotation", output)
+        self.assertIn("1.3 ensembl", output)
+        self.assertIn("7. Model organisms and comparative genomics", output)
+        self.assertIn("[env: JGI_EMAIL, JGI_PASSWORD]", output)
+
+    def test_slot_number_selects_provider(self):
+        with patch.object(cli, "find_command", return_value="/usr/bin/ensembl-mcp"):
+            config = json.loads(self.invoke("config", "1.3"))
+        self.assertEqual(config, {"mcpServers": {"ensembl": {"command": "/usr/bin/ensembl-mcp"}}})
+
+    def test_category_number_selects_installed_providers_in_slot_order(self):
+        with patch.object(cli, "find_command", return_value="/usr/bin/x-mcp"):
+            config = json.loads(self.invoke("config", "7"))
+        self.assertEqual(list(config["mcpServers"]), ["alliance", "phytozome"])
+
+    def test_numbers_and_names_mix_and_deduplicate(self):
+        from common.categories import resolve_selections
+        commands = {"ensembl": "", "pdb": "", "uniprot": ""}
+        self.assertEqual(resolve_selections(["ensembl", "2.1", "1.3"], commands), ["ensembl", "uniprot"])
+
+    def test_unknown_numbers_fail_cleanly(self):
+        from common.categories import resolve_selections
+        with self.assertRaises(ValueError):
+            resolve_selections(["99"], {"pdb": ""})
+        with self.assertRaises(ValueError):
+            resolve_selections(["9.9"], {"pdb": ""})
+        with self.assertRaises(ValueError):
+            resolve_selections(["no-such"], {"pdb": ""})
+
+    def test_cli_rejects_unknown_number_with_exit_two(self):
+        with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+            self.invoke("config", "99")
+        self.assertEqual(error.exception.code, 2)

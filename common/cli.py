@@ -19,6 +19,9 @@ ENVIRONMENT_VARIABLES = {
     "clinvar": ["NCBI_EMAIL", "NCBI_API_KEY"],
     "biogrid": ["BIOGRID_API_KEY"],
     "disgenet": ["DISGENET_API_KEY"],
+    "variation": ["NCBI_EMAIL", "NCBI_API_KEY"],
+    "taxonomy": ["NCBI_EMAIL", "NCBI_API_KEY"],
+    "phytozome": ["JGI_EMAIL", "JGI_PASSWORD"],
 }
 
 
@@ -113,11 +116,12 @@ def main(argv: list[str] | None = None) -> None:
     commands = server_commands()
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="action", required=True)
-    subparsers.add_parser("list", help="List available provider names")
+    subparsers.add_parser("list", help="List available providers grouped by category with selection numbers")
     for action in ("config", "register"):
         sub = subparsers.add_parser(action, help="Print configuration" if action == "config"
                                     else "Merge entries into an mcpServers JSON file")
-        sub.add_argument("servers", nargs="+", choices=sorted(commands), metavar="SERVER")
+        sub.add_argument("servers", nargs="+", metavar="SERVER",
+                         help="Provider names or numbers, e.g. ensembl, 1.3, 2")
         sub.add_argument("--serve", action="store_true",
                          help="Emit one aggregated entry serving all selected providers")
         sub.add_argument("--uvx", action="store_true",
@@ -128,23 +132,30 @@ def main(argv: list[str] | None = None) -> None:
             sub.add_argument("--config", type=Path, required=True, help="Target mcpServers JSON file")
             sub.add_argument("--replace", action="store_true", help="Replace conflicting selected entries")
     serve = subparsers.add_parser("serve", help="Serve selected providers aggregated in one MCP process")
-    serve.add_argument("servers", nargs="+", choices=sorted(commands), metavar="SERVER")
+    serve.add_argument("servers", nargs="+", metavar="SERVER",
+                       help="Provider names or numbers, e.g. ensembl, 1.3, 2")
     call = subparsers.add_parser("call", help="Invoke one tool on an installed provider server")
-    call.add_argument("provider", choices=sorted(commands), metavar="SERVER")
+    call.add_argument("provider", metavar="SERVER", help="Provider name or number, e.g. ensembl, 1.3")
     call.add_argument("tool", help="Tool name, as shown by the provider's list_tools")
     call.add_argument("arguments", nargs="?", default="{}", help="JSON object with tool arguments")
     call.add_argument("--timeout", type=float, default=120.0, help="Seconds to wait for the tool result")
     args = parser.parse_args(argv)
+    from common.categories import format_list, resolve_selections
     if args.action == "list":
-        print("\n".join(sorted(commands)))
+        print(format_list(commands))
         return
+    if args.action == "call":
+        provider, = resolve_selections([args.provider], commands)
+        from common.call import main as call_main
+        call_main(find_command(f"{provider}-mcp"), args.tool, args.arguments, args.timeout)
+        return
+    try:
+        args.servers = resolve_selections(args.servers, commands)
+    except ValueError as error:
+        parser.error(str(error))
     if args.action == "serve":
         from common.serve import main as serve_main
         serve_main(args.servers)
-        return
-    if args.action == "call":
-        from common.call import main as call_main
-        call_main(find_command(f"{args.provider}-mcp"), args.tool, args.arguments, args.timeout)
         return
     try:
         entries = build_entries(args.servers, serve=args.serve, uvx=args.uvx)
