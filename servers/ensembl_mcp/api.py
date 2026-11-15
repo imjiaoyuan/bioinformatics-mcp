@@ -6,8 +6,10 @@ from common.http import bounded, get_json, identifier as valid_id, identifiers, 
 BASE = "https://rest.ensembl.org"
 
 # Ensembl stable IDs, e.g. ENSG00000141510, ENST00000471234, ENSP00000269305,
-# plant locus/transcript styles (Os01g0100100, Os01t0100500-01), or dbSNP rs IDs.
-_ID = r"(?:ENS[A-Z]{0,4}[GTPE]\d{11}(?:\.\d+)?|[A-Za-z]{2,5}\d{1,3}[GgTtPp]\d{7}(?:[.-]\d+)?|RS\d{8})"
+# plant locus/transcript styles (Os01g0100100, Os01t0100500-01), FlyBase IDs
+# (FBgn0000055), WormBase genes (WBGene00004804), yeast systematic IDs (YAL060W),
+# or dbSNP rs IDs.
+_ID = r"(?:ENS[A-Z]{0,4}[GTPE]\d{11}(?:\.\d+)?|[A-Za-z]{2,5}\d{1,3}[GgTtPp]\d{7}(?:[.-]\d+)?|FB[a-z]{2}\d{7}|WBGene\d{8}|[A-Za-z]{3}\d{3}[A-Za-z](?:-\d+)?|RS\d{8})"
 _REGION = r"[A-Za-z0-9_.-]+:\d{1,12}(?:[.:]\d{1,12})?(?:-[.:]?\d{1,12})?(?:\?.*)?"
 
 def _stable_id(value: str, name: str = "identifier") -> str:
@@ -32,6 +34,16 @@ async def ensembl_lookup(identifier: str, expand: bool = False) -> dict:
     """Look up an Ensembl gene, transcript, variant, or other stable ID."""
     return await _get(f"/lookup/id/{_stable_id(identifier)}", {"expand": 1 if expand else 0})
 
+_SYMBOL = r"[A-Za-z0-9_.:|-]+"
+
+async def ensembl_lookup_symbol(symbol: str, species: str = "oryza_sativa") -> dict:
+    """Look up a gene by its species-scoped symbol (e.g. PHYB for arabidopsis_thaliana, adh for fly)."""
+    symbol = valid_id(symbol.strip(), _SYMBOL, "symbol")
+    species = _species_name(species)
+    path = f"/lookup/symbol/{species}/{symbol}"
+    data = await _get(path, {"expand": 0})
+    return {"symbol": symbol, "species": species, "gene": data, "source_url": BASE + path}
+
 async def ensembl_xrefs(identifier: str) -> list:
     """Find external database cross-references for an Ensembl identifier."""
     return await _get(f"/xrefs/id/{_stable_id(identifier)}")
@@ -43,11 +55,23 @@ async def ensembl_overlap(region: str, feature: str = "gene", species: str = "hu
     return await _get(f"/overlap/region/{_species_name(species)}/{_region(region)}", {"feature": feature})
 
 async def ensembl_species(query: str = "rice", division: str = "EnsemblPlants", limit: int = 30) -> dict:
-    """Find supported species and their assembly/release identifiers, defaulting to plants."""
+    """Find supported species and their assembly/release identifiers, defaulting to plants.
+
+    Divisions: EnsemblPlants, EnsemblFungi, EnsemblMetazoa, EnsemblBacteria (the
+    bacteria listing is very large, so it is fetched with a raised byte bound and
+    results are still sliced locally with truncation flags).
+    """
     bounded(limit, 500)
     division = valid_id(division)
     query = text(query, "query", 100).lower()
-    data = await _get("/info/species", {"division": division})
+    url = f"{BASE}/info/species"
+    # EnsemblBacteria lists >30k species (~10 MB JSON); raise the byte bound for
+    # this division only, then slice locally to keep tool output bounded.
+    max_bytes = 24_000_000 if division.lower() == "ensemblbacteria" else 8_000_000
+    response = await request("GET", url, params={"division": division,
+                                                "content-type": "application/json"},
+                             max_bytes=max_bytes)
+    data = response.json()
     matches = [s for s in data.get("species", []) if query in " ".join(
         str(s.get(k, "")) for k in ("name", "display_name", "common_name", "aliases")).lower()]
     return {"species": matches[:limit], "total": len(matches), "truncated": len(matches) > limit,
@@ -77,8 +101,11 @@ async def ensembl_sequence(identifier: str, sequence_type: str = "genomic", max_
 async def ensembl_homologs(identifier: str, species: str = "oryza_sativa",
                           target_species: str | None = None, homology_type: str = "orthologues",
                           compara: str = "plants", limit: int = 20) -> dict:
-    """Get plant orthologs/paralogs using the plants Compara database, without sequence alignments."""
-    identifier, species, compara = _stable_id(identifier), _species_name(species), valid_id(compara)
+    """Get orthologs/paralogs using a Genomes Compara database (plants, fungi or metazoa)."""
+    identifier, species = _stable_id(identifier), _species_name(species)
+    compara = valid_id(compara.strip().lower())
+    if compara not in {"plants", "fungi", "metazoa"}:
+        raise ValueError("compara must be plants, fungi or metazoa; EnsemblBacteria provides no homology service")
     bounded(limit, 200)
     if homology_type not in {"orthologues", "paralogues", "all"}:
         raise ValueError("homology_type must be orthologues, paralogues or all")
@@ -94,6 +121,7 @@ async def ensembl_homologs(identifier: str, species: str = "oryza_sativa",
 
 TOOLS = (
     ensembl_lookup,
+    ensembl_lookup_symbol,
     ensembl_xrefs,
     ensembl_overlap,
     ensembl_species,
