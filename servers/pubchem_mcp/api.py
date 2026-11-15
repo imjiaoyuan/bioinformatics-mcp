@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import re
+from typing import Annotated
 
 import httpx
+from pydantic import Field
 
 from common.api import json_response, local_page
 from common.http import identifier, request, safe_url, text
@@ -64,7 +66,8 @@ async def pubchem_compound(cid: str) -> dict:
     return {**data, "compound": rows[0] if rows else None}
 
 
-async def pubchem_synonyms(cid: str, limit: int = 20, offset: int = 0) -> dict:
+async def pubchem_synonyms(cid: str, limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                           offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """List known names, trade names and CAS-style synonyms for one CID; paginated locally."""
     data = await _get(f"{PUG}/compound/cid/{_cid(cid)}/synonyms/JSON")
     info = data.get("InformationList", {}).get("Information", [])
@@ -139,4 +142,17 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def resource_catalog() -> dict:
+    """List PubChem computed properties and endpoint constraints."""
+    return {"computed_properties": PROPERTIES.split(","),
+            "endpoints": {"resolve": "compound/name/{name}/cids", "compound": "compound/cid/{cid}",
+                          "synonyms": "compound/cid/{cid}/synonyms", "description": "compound/.../description",
+                          "substance": "substance/sid/{sid}", "assay": "assay/aid/{aid}/description",
+                          "annotation": "pug_view compound/{cid}?heading=..."},
+            "limit": "1-100", "offset": "0-1000000",
+            "id_bounds": "positive integers up to 10000000000"}
+
+
+RESOURCES = (
+    ("pubchem://databases", resource_catalog),
+)

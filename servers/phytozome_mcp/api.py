@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import base64
 import os
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import Field
 
 from common.api import local_page
 from common.http import bounded, identifier, request, safe_url, text
@@ -97,7 +99,9 @@ def _match(row: dict, needle: str) -> bool:
     return needle in haystack
 
 
-async def phytozome_organisms(query: str = "", limit: int = 20, offset: int = 0) -> dict:
+async def phytozome_organisms(query: str = "",
+                              limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                              offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """List Phytozome organisms, filtered locally by scientific name or keyword.
 
     Fetches the organism catalog once per call (``compressed=false``) and
@@ -165,7 +169,8 @@ async def phytozome_gene(gene_id: str) -> dict:
 
 
 async def phytozome_gene_search(keyword: str, organism: str | None = None,
-                                limit: int = 20, offset: int = 0) -> dict:
+                                limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                                offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Search Phytozome genes by keyword, optionally scoped to one organism.
 
     ``keyword`` is matched by the upstream gene search service (gene names,
@@ -217,4 +222,19 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _endpoints() -> dict:
+    """Describe the Phytozome v3 endpoints and parameter constraints."""
+    return {"upstream": BASE,
+            "endpoints": {"phytozome_organisms": "GET /organism?compressed=false (catalog filtered and paginated locally)",
+                          "phytozome_organism": "GET /organism/{organism_id}",
+                          "phytozome_gene": "GET /gene/{gene_id}",
+                          "phytozome_gene_search": "GET /gene/search?keyword[&organism] (paginated locally)",
+                          "phytozome_download_info": "info page URL only; downloads require JGI login"},
+            "constraints": {"limit": "1-100", "offset": "0-1000000",
+                            "organism": "Phytozome organismId or organismName (e.g. Athaliana)"},
+            "requires": "JGI_EMAIL and JGI_PASSWORD environment credentials"}
+
+
+RESOURCES = (
+    ("phytozome://endpoints", _endpoints),
+)

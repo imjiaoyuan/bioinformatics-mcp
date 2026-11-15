@@ -1,6 +1,8 @@
 """PDBe entry summaries, SIFTS mappings, PDBe-KB aggregates and ligand/residue data."""
 from __future__ import annotations
 
+import json
+
 from common.api import json_response
 from common.http import identifier
 
@@ -71,4 +73,25 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def endpoints() -> str:
+    """Describe the PDBe REST endpoints and entry-ID constraint used by this server."""
+    return json.dumps({
+        "resource": "pdbe://endpoints",
+        "base": BASE,
+        "entry_id_pattern": "[0-9][A-Za-z0-9]{3}",
+        "endpoints": {
+            "pdbe_entry_summary": "pdb/entry/summary/{entry_id}",
+            "pdbe_sifts_uniprot": "mappings/uniprot/{entry_id}",
+            "pdbe_sifts_ena": "mappings/ena/{entry_id}",
+            "pdbe_pdbe_kb_summary": "mappings/all/{entry_id}",
+            "pdbe_ligands": "pdb/entry/ligand_monomers/{entry_id}",
+            "pdbe_modified_residues": "pdb/entry/modified_residues_or_NA/{entry_id}",
+            "pdbe_secondary_structure": "pdb/entry/secondary_structure/{entry_id}",
+        },
+        "notes": "Entries without the requested mapping return upstream HTTP 404.",
+    })
+
+
+RESOURCES = (
+    ("pdbe://endpoints", endpoints),
+)

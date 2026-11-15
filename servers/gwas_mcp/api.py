@@ -1,6 +1,10 @@
 """GWAS Catalog REST v2 curated associations, studies and variants."""
 from __future__ import annotations
 
+from typing import Annotated
+
+from pydantic import Field
+
 from common.api import json_response
 from common.http import bounded, identifier, text
 
@@ -29,7 +33,8 @@ async def _get(path: str, params: dict | None = None) -> dict:
     return {**source, **data}
 
 
-async def gwas_traits(query: str, limit: int = 20, page: int = 0) -> dict:
+async def gwas_traits(query: str, limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                      page: Annotated[int, Field(ge=0, le=10000)] = 0) -> dict:
     """Find ontology-mapped traits by name; pages start at zero."""
     return await _get("efo-traits", {**_page(limit, page), "efo_trait": text(query)})
 
@@ -54,8 +59,9 @@ async def gwas_study(accession: str) -> dict:
 
 async def gwas_associations(efo_id: str | None = None, rs_id: str | None = None,
                             accession: str | None = None, gene: str | None = None,
-                            show_child_traits: bool = False, limit: int = 20,
-                            page: int = 0) -> dict:
+                            show_child_traits: bool = False,
+                            limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                            page: Annotated[int, Field(ge=0, le=10000)] = 0) -> dict:
     """Query curated top associations, not full genome-wide summary statistics."""
     params = {**_page(limit, page), "show_child_trait": str(show_child_traits).lower(),
               "extended_geneset": "false"}
@@ -82,4 +88,16 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def resource_catalog() -> dict:
+    """Describe GWAS Catalog v2 endpoints, filters and paging bounds."""
+    return {"endpoints": ["efo-traits", "studies", "studies/{GCST accession}",
+                          "associations", "single-nucleotide-polymorphisms/{rs id}"],
+            "filters": {"efo_trait": "trait name", "efo_id": "EFO_xxxxx",
+                        "mapped_gene": "gene symbol", "ancestral_group": "sample ancestry",
+                        "rs_id": "rs ID", "accession_id": "GCST accession"},
+            "limit": "1-100", "page": "0-10000 (zero-based)"}
+
+
+RESOURCES = (
+    ("gwas://endpoints", resource_catalog),
+)

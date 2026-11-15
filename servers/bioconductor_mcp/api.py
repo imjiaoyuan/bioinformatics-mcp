@@ -1,7 +1,12 @@
 from __future__ import annotations
 import os
 import re
+from typing import Annotated
+
 import httpx
+from pydantic import Field
+
+from common.http import request
 
 DEFAULT_VERSION = os.getenv("BIOC_VERSION", "3.21")
 
@@ -11,10 +16,10 @@ def _base(version: str) -> str:
     return f"https://bioconductor.org/packages/json/{version}"
 
 async def _json(url: str) -> object:
-    async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-        r = await client.get(url); r.raise_for_status(); return r.json()
+    return (await request("GET", url, timeout=60)).json()
 
-async def bioconductor_search(query: str, version: str = DEFAULT_VERSION, limit: int = 20) -> list[dict]:
+async def bioconductor_search(query: str, version: str = DEFAULT_VERSION,
+                              limit: Annotated[int, Field(ge=1, le=100)] = 20) -> list[dict]:
     """Search Bioconductor software and annotation packages by name, title, or description."""
     limit = max(1, min(limit, 100)); q = query.lower()
     result: list[dict] = []
@@ -64,4 +69,13 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def resource_catalog() -> dict:
+    """Describe Bioconductor repositories and parameter constraints."""
+    return {"repositories": ["bioc", "data/annotation", "data/experiment"],
+            "version_format": "release number like 3.21 (default from BIOC_VERSION)",
+            "limit": "1-100", "package_format": "R package name [A-Za-z][A-Za-z0-9.]*"}
+
+
+RESOURCES = (
+    ("bioconductor://repositories", resource_catalog),
+)

@@ -7,7 +7,11 @@ rate limited; shared clients must register their own key.
 """
 from __future__ import annotations
 
+import json
 import os
+from typing import Annotated, Literal
+
+from pydantic import Field
 
 from common.api import choice, json_response
 from common.http import bounded, identifier, identifiers, text
@@ -44,8 +48,9 @@ async def biogrid_interactions(genes: list[str] | None = None, tax_id: str | Non
                                pubmed_list: list[str] | None = None,
                                search_ids: bool = False, search_names: bool = True,
                                include_interactors: bool = True,
-                               throughput: str = "any", limit: int = 20,
-                               start: int = 0) -> dict:
+                               throughput: Literal["any", "low", "high"] = "any",
+                               limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                               start: Annotated[int, Field(ge=0, le=10_000)] = 0) -> dict:
     """Retrieve curated interactions for genes by official symbol or identifier.
 
     Provide ``genes`` (official symbols, Entrez Gene or systematic IDs matched via
@@ -110,4 +115,24 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def endpoints() -> str:
+    """Describe the BioGRID REST endpoints and their constraints."""
+    return json.dumps({
+        "resource": "biogrid://endpoints",
+        "base": BASE,
+        "auth": "BIOGRID_API_KEY environment variable is required",
+        "throughput_tags": ["any", "low", "high"],
+        "endpoints": {
+            "biogrid_interactions": "interactions/ (max page 10000 rows via start)",
+            "biogrid_interaction": "interaction/{id}",
+            "biogrid_evidence": "evidence/ (experimental system names)",
+            "biogrid_organisms": "organisms/ (tax_id values)",
+            "biogrid_identifiers": "identifiers/ (cross-reference ID types)",
+            "biogrid_version": "version",
+        },
+    })
+
+
+RESOURCES = (
+    ("biogrid://endpoints", endpoints),
+)

@@ -1,6 +1,10 @@
 """Ensembl VEP variant consequence annotation over the REST API."""
 from __future__ import annotations
 
+from typing import Annotated
+
+from pydantic import Field
+
 from common.api import json_response
 from common.http import bounded, identifier, identifiers, text
 
@@ -40,7 +44,7 @@ async def _post(path: str, params: dict, body: dict) -> dict:
 async def vep_hgvs(species: str, hgvs: str, pick: bool = False, canonical: bool = False,
                    hgvs_labels: bool = False, protein: bool = False, mane: bool = False,
                    refseq: bool = False, numbers: bool = False, variant_class: bool = False,
-                   merged: bool = False, distance: int | None = None) -> dict:
+                   merged: bool = False, distance: Annotated[int | None, Field(ge=0, le=25_000)] | None = None) -> dict:
     """Annotate one HGVS notation (g., c. or p.) with variant consequences."""
     validated = text(hgvs, "hgvs", 150)
     if not any(f":{kind}." in validated for kind in ("g", "c", "p", "n", "m", "r")):
@@ -56,7 +60,7 @@ async def vep_hgvs_batch(species: str, hgvs_notations: list[str], pick: bool = F
                          canonical: bool = False, hgvs_labels: bool = False,
                          protein: bool = False, mane: bool = False, refseq: bool = False,
                          numbers: bool = False, variant_class: bool = False,
-                         merged: bool = False, distance: int | None = None) -> dict:
+                         merged: bool = False, distance: Annotated[int | None, Field(ge=0, le=25_000)] | None = None) -> dict:
     """Annotate up to 200 HGVS notations with variant consequences via one POST request."""
     values = identifiers(hgvs_notations, 200)
     for value in values:
@@ -70,7 +74,7 @@ async def vep_hgvs_batch(species: str, hgvs_notations: list[str], pick: bool = F
 async def vep_region(species: str, region: str, pick: bool = False, canonical: bool = False,
                      hgvs_labels: bool = False, protein: bool = False, mane: bool = False,
                      refseq: bool = False, numbers: bool = False, variant_class: bool = False,
-                     merged: bool = False, distance: int | None = None) -> dict:
+                     merged: bool = False, distance: Annotated[int | None, Field(ge=0, le=25_000)] | None = None) -> dict:
     """Annotate one genomic region set, e.g. 9:22125504-22125504:1/1 or 9:22125504-22125504:G/C."""
     identifier(text(region, "region", 100), REGION_PATTERN, "region set")
     return await _get(f"/vep/{_species(species)}/region/{region}",
@@ -83,7 +87,7 @@ async def vep_region_batch(species: str, variants: list[str], pick: bool = False
                            canonical: bool = False, hgvs_labels: bool = False,
                            protein: bool = False, mane: bool = False, refseq: bool = False,
                            numbers: bool = False, variant_class: bool = False,
-                           merged: bool = False, distance: int | None = None) -> dict:
+                           merged: bool = False, distance: Annotated[int | None, Field(ge=0, le=25_000)] | None = None) -> dict:
     """Annotate up to 200 VCF-style variant lines (chromosome start id ref alt) via one POST request."""
     values = identifiers(variants, 200)
     for value in values:
@@ -101,7 +105,7 @@ async def vep_region_batch(species: str, variants: list[str], pick: bool = False
 async def vep_id(species: str, variant_id: str, pick: bool = False, canonical: bool = False,
                  hgvs_labels: bool = False, protein: bool = False, mane: bool = False,
                  refseq: bool = False, numbers: bool = False, variant_class: bool = False,
-                 merged: bool = False, distance: int | None = None) -> dict:
+                 merged: bool = False, distance: Annotated[int | None, Field(ge=0, le=25_000)] | None = None) -> dict:
     """Annotate one known variant identifier such as rs56116432 or COSM476."""
     identifier(variant_id, r"[A-Za-z][A-Za-z0-9_.-]*", "variant identifier")
     return await _get(f"/vep/{_species(species)}/id/{variant_id}",
@@ -114,7 +118,7 @@ async def vep_id_batch(species: str, variant_ids: list[str], pick: bool = False,
                        canonical: bool = False, hgvs_labels: bool = False,
                        protein: bool = False, mane: bool = False, refseq: bool = False,
                        numbers: bool = False, variant_class: bool = False,
-                       merged: bool = False, distance: int | None = None) -> dict:
+                       merged: bool = False, distance: Annotated[int | None, Field(ge=0, le=25_000)] | None = None) -> dict:
     """Annotate up to 200 known variant identifiers via one POST request."""
     values = identifiers(variant_ids, 200)
     for value in values:
@@ -135,4 +139,18 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _parameters() -> dict:
+    """Describe VEP tool parameters and their bounds."""
+    return {"upstream": "https://rest.ensembl.org/vep/...",
+            "flags": ["pick", "canonical", "hgvs", "protein", "mane", "refseq",
+                      "numbers", "variant_class", "merged"],
+            "distance": "0-25000 (upstream search distance)",
+            "batch_size": "up to 200 notations/variants per batch call",
+            "input_formats": {"vep_hgvs": "HGVS g./c./p./n./m./r. notation",
+                              "vep_region": "chrom:start-end[:allele]",
+                              "vep_id": "variant identifier such as rs56116432"}}
+
+
+RESOURCES = (
+    ("vep://parameters", _parameters),
+)

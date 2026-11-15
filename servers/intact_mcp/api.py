@@ -1,6 +1,11 @@
 """IntAct molecular interactions, interactors and publication references."""
 from __future__ import annotations
 
+import json
+from typing import Annotated
+
+from pydantic import Field
+
 from common.api import json_response, page
 from common.http import identifier, text
 
@@ -12,7 +17,8 @@ async def _get(path: str, params: dict | None = None) -> dict:
     return {**source, **data}
 
 
-async def intact_interaction_search(query: str, limit: int = 20, offset: int = 0) -> dict:
+async def intact_interaction_search(query: str, limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                                    offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Search molecular interactions by interactor identifier, gene name or interaction AC.
 
     Preserve upstream pagination metadata; the raw query is forwarded to IntAct search.
@@ -21,7 +27,8 @@ async def intact_interaction_search(query: str, limit: int = 20, offset: int = 0
                       {"first": page(limit, offset)["offset"], "number": page(limit, offset)["limit"]})
 
 
-async def intact_interactor_search(query: str, limit: int = 20, offset: int = 0) -> dict:
+async def intact_interactor_search(query: str, limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                                   offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Search interactors (proteins, genes, small molecules) by identifier, name or alias."""
     return await _get(f"interactor/findInteractor/{text(query, 'query', 300)}",
                       {"first": page(limit, offset)["offset"], "number": page(limit, offset)["limit"]})
@@ -37,7 +44,8 @@ async def intact_interaction_details(interaction_ac: str) -> dict:
     return {**data, "interaction": matches[0]}
 
 
-async def intact_publication_interactions(pubmed_id: str, limit: int = 20, offset: int = 0) -> dict:
+async def intact_publication_interactions(pubmed_id: str, limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                                          offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """List interactions curated from one PubMed reference."""
     pmid = identifier(pubmed_id, r"[0-9]+", "PubMed ID")
     params = page(limit, offset)
@@ -53,4 +61,22 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def search_endpoints() -> str:
+    """Describe the IntAct search endpoints and paging constraints."""
+    return json.dumps({
+        "resource": "intact://search-endpoints",
+        "base": BASE,
+        "endpoints": {
+            "intact_interaction_search": "interaction/findInteractions/{query}",
+            "intact_interactor_search": "interactor/findInteractor/{query}",
+            "intact_interaction_details": "interaction AC pattern EBI-[0-9]+",
+            "intact_publication_interactions": "query by PubMed ID",
+        },
+        "paging": {"first": "0-1000000", "number": "1-100", "mode": "upstream pagination preserved"},
+        "query_limit": "300 characters",
+    })
+
+
+RESOURCES = (
+    ("intact://search-endpoints", search_endpoints),
+)

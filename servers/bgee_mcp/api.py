@@ -1,6 +1,10 @@
 """Bgee healthy wild-type gene expression via the public SPARQL endpoint."""
 from __future__ import annotations
 
+from typing import Annotated
+
+from pydantic import Field
+
 from common.api import json_response, page
 from common.http import bounded, identifier, text
 
@@ -20,6 +24,9 @@ PREFIX up: <http://purl.uniprot.org/core/>
 # Bgee labels genes, anatomical entities and species with free-text names;
 # restrict literals to characters that cannot escape the SPARQL string context.
 _NAME = r"[A-Za-z0-9_. '-]+"
+
+Limit = Annotated[int, Field(ge=1, le=100)]
+Offset = Annotated[int, Field(ge=0, le=1_000_000)]
 
 
 def _name(value: str, name: str = "name") -> str:
@@ -44,7 +51,7 @@ async def _query(select: str, where: str, limit: int, offset: int) -> dict:
     return {**source, "sparql": query, "results": rows, **paging}
 
 
-async def bgee_species(limit: int = 20, offset: int = 0) -> dict:
+async def bgee_species(limit: Limit = 20, offset: Offset = 0) -> dict:
     """List species present in Bgee with their scientific and common names."""
     where = ("?species a up:Taxon ; up:scientificName ?scientificName ; "
              "up:rank up:Species . OPTIONAL { ?species up:commonName ?commonName . }")
@@ -63,7 +70,7 @@ async def bgee_gene_info(ensembl_id: str) -> dict:
     return await _query("?symbol ?description ?id ?organism ?uniprot ?ensembl ?ncbi", where, 100, 0)
 
 
-async def bgee_gene_species(gene: str, limit: int = 20, offset: int = 0) -> dict:
+async def bgee_gene_species(gene: str, limit: Limit = 20, offset: Offset = 0) -> dict:
     """List species in which a gene with the given name or symbol is present."""
     literal = _name(gene, "gene")
     where = ("?gene a orth:Gene ; rdfs:label ?geneName ; orth:organism ?organism . "
@@ -74,7 +81,7 @@ async def bgee_gene_species(gene: str, limit: int = 20, offset: int = 0) -> dict
 
 
 async def bgee_gene_expression(gene: str, species: str | None = None,
-                               limit: int = 20, offset: int = 0) -> dict:
+                               limit: Limit = 20, offset: Offset = 0) -> dict:
     """List anatomical entities where a gene is expressed in Bgee conditions."""
     literal = _name(gene, "gene")
     where = ("?seq a orth:Gene ; rdfs:label ?geneName ; genex:isExpressedIn ?anat . "
@@ -84,7 +91,7 @@ async def bgee_gene_expression(gene: str, species: str | None = None,
 
 
 async def bgee_gene_expression_scores(gene: str, species: str | None = None,
-                                      limit: int = 20, offset: int = 0) -> dict:
+                                      limit: Limit = 20, offset: Offset = 0) -> dict:
     """List expressed anatomical entities with developmental stage and expression score.
 
     Scores come from Bgee expression calls; compare them only within one species
@@ -104,7 +111,7 @@ async def bgee_gene_expression_scores(gene: str, species: str | None = None,
 
 
 async def bgee_anatomy_genes(anatomy: str, species: str | None = None,
-                             limit: int = 20, offset: int = 0) -> dict:
+                             limit: Limit = 20, offset: Offset = 0) -> dict:
     """List genes expressed in one anatomical entity, matched by exact entity name."""
     literal = _name(anatomy, "anatomy")
     where = ("?gene a orth:Gene ; genex:isExpressedIn ?anat ; rdfs:label ?geneName ; "
@@ -125,4 +132,15 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def bgee_sparql() -> dict:
+    """Describe the Bgee SPARQL endpoint and the prefixes used by bgee_* tools."""
+    return {"endpoint": ENDPOINT,
+            "prefixes": dict(line.split(": ", 1) for line in
+                             [p[len("PREFIX "):] for p in PREFIXES.strip().splitlines()]),
+            "name_pattern": _NAME,
+            "paging": {"limit": "1-100", "offset": "0-1000000"}}
+
+
+RESOURCES = (
+    ("bgee://sparql", bgee_sparql),
+)

@@ -10,7 +10,9 @@ live database view. No HTML scraping and no files are written to disk.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import Field
 
 from common.api import local_page
 from common.http import identifier, request, text
@@ -18,6 +20,9 @@ from common.http import identifier, request, text
 ONTOLOGY_URL = "https://purl.obolibrary.org/obo/mondo.json"
 MAX_BYTES = 250_000_000
 PREFIX = "http://purl.obolibrary.org/obo/"
+
+Limit = Annotated[int, Field(ge=1, le=100)]
+Offset = Annotated[int, Field(ge=0, le=1_000_000)]
 
 _ontology: dict[str, Any] | None = None
 _lock = asyncio.Lock()
@@ -81,7 +86,7 @@ def _matches(entry: dict[str, Any], needle: str) -> bool:
     return needle in haystack.lower()
 
 
-async def mondo_search(query: str, limit: int = 20, offset: int = 0) -> dict:
+async def mondo_search(query: str, limit: Limit = 20, offset: Offset = 0) -> dict:
     """Search disease labels and synonyms by case-insensitive substring.
 
     Matches the downloaded MONDO release snapshot locally and paginates it
@@ -121,7 +126,7 @@ async def mondo_xrefs(mondo_id: str) -> dict:
             "label": entry["label"], "xrefs": entry["xrefs"], "total": len(entry["xrefs"])}
 
 
-async def mondo_xref_lookup(xref: str, limit: int = 20, offset: int = 0) -> dict:
+async def mondo_xref_lookup(xref: str, limit: Limit = 20, offset: Offset = 0) -> dict:
     """Reverse-lookup MONDO diseases by an external cross-reference, e.g. OMIM:125853.
 
     The reference is matched case-insensitively against the release snapshot.
@@ -134,7 +139,7 @@ async def mondo_xref_lookup(xref: str, limit: int = 20, offset: int = 0) -> dict
     return local_page(matched, limit, offset, source_url=ontology["source_url"], xref=reference)
 
 
-async def mondo_children(mondo_id: str, limit: int = 20, offset: int = 0) -> dict:
+async def mondo_children(mondo_id: str, limit: Limit = 20, offset: Offset = 0) -> dict:
     """List the direct subclasses of one disease from the release is_a edges.
 
     Only direct children are returned; use mondo_entry for the parent itself.
@@ -156,4 +161,15 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def mondo_release() -> dict:
+    """Describe the MONDO release source and identifier conventions used by mondo_* tools."""
+    return {"release_url": ONTOLOGY_URL,
+            "mondo_id": "MONDO:0000000-style identifier (MONDO: + 7 digits)",
+            "xref": "external cross-reference such as OMIM:125853",
+            "note": "Entries come from the dated release snapshot parsed once per process.",
+            "paging": {"limit": "1-100", "offset": "0-1000000"}}
+
+
+RESOURCES = (
+    ("mondo://release", mondo_release),
+)

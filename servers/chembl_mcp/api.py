@@ -1,6 +1,10 @@
 """ChEMBL compounds, targets, assays and measured bioactivities."""
 from __future__ import annotations
 
+from typing import Annotated, Literal
+
+from pydantic import Field
+
 from common.api import choice, json_response, page
 from common.http import identifier, text
 
@@ -16,8 +20,9 @@ async def _get(path: str, params: dict | None = None) -> dict:
     return {**source, **data}
 
 
-async def chembl_search(query: str, resource: str = "molecule", limit: int = 20,
-                        offset: int = 0) -> dict:
+async def chembl_search(query: str, resource: Literal["molecule", "target", "assay"] = "molecule",
+                        limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                        offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Search compounds, targets or assays; preserve upstream pagination metadata."""
     choice(resource, {"molecule", "target", "assay"}, "resource")
     return await _get(f"{resource}/search", {**page(limit, offset), "q": text(query)})
@@ -34,8 +39,9 @@ async def chembl_target(chembl_id: str) -> dict:
 
 
 async def chembl_activities(target_id: str | None = None, molecule_id: str | None = None,
-                            standard_type: str | None = None, limit: int = 20,
-                            offset: int = 0) -> dict:
+                            standard_type: str | None = None,
+                            limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                            offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Retrieve measured activities, preserving units, relation, assay and validity flags.
 
     IC50, Ki and other measurements are not automatically converted or pooled.
@@ -56,7 +62,9 @@ async def chembl_assay(chembl_id: str) -> dict:
     return await _get(f"assay/{_id(chembl_id)}")
 
 
-async def chembl_mechanisms(molecule_id: str, limit: int = 20, offset: int = 0) -> dict:
+async def chembl_mechanisms(molecule_id: str,
+                            limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                            offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Retrieve curated mechanisms of action for one compound."""
     return await _get("mechanism", {**page(limit, offset), "molecule_chembl_id": _id(molecule_id)})
 
@@ -71,4 +79,13 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def resource_catalog() -> dict:
+    """List valid ChEMBL search resources and paging bounds."""
+    return {"search_resources": ["molecule", "target", "assay"],
+            "limit": "1-100", "offset": "0-1000000",
+            "id_format": "CHEMBL-prefixed IDs (e.g. CHEMBL25)"}
+
+
+RESOURCES = (
+    ("chembl://resources", resource_catalog),
+)

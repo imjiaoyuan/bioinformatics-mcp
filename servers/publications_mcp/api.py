@@ -2,9 +2,11 @@ from __future__ import annotations
 import asyncio
 import os
 import re
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 import httpx
+from pydantic import Field
 
 from common.http import bounded, identifier, request, text
 
@@ -40,8 +42,11 @@ def _clean(item: dict) -> dict:
             "journal": (item.get("container-title") or [None])[0], "publisher": item.get("publisher"),
             "url": item.get("URL"), "type": item.get("type")}
 
-async def publication_search(query: str, publisher: str | None = None, year_from: int | None = None,
-                             year_to: int | None = None, limit: int = 20) -> dict:
+async def publication_search(query: str,
+                             publisher: Literal["cell", "nature", "pnas", "science"] | None = None,
+                             year_from: Annotated[int | None, Field(ge=1400, le=3000)] = None,
+                             year_to: Annotated[int | None, Field(ge=1400, le=3000)] = None,
+                             limit: Annotated[int, Field(ge=1, le=100)] = 20) -> dict:
     """Search Cell, Nature, PNAS, Science, or all scholarly publications."""
     query = text(query)
     if publisher is not None and publisher not in PUBLISHERS:
@@ -67,7 +72,7 @@ async def publication_by_doi(doi: str) -> dict:
     """Get authoritative Crossref metadata for a DOI."""
     return _clean((await _get(f"{CROSSREF}/works/{_doi(doi)}"))["message"])
 
-async def publication_related(doi: str, limit: int = 20) -> dict:
+async def publication_related(doi: str, limit: Annotated[int, Field(ge=1, le=50)] = 20) -> dict:
     """Find related OpenAlex works; distinguish empty results from partial/failed retrievals.
 
     Returns articles, errors, partial, and truncation metadata. Individual failures
@@ -107,7 +112,7 @@ async def publication_related(doi: str, limit: int = 20) -> dict:
             "errors": errors, "partial": bool(errors), "all_requests_failed": bool(ids) and len(errors) == len(ids),
             "truncated": len(related) > len(ids), "source_url": f"{OPENALEX}/works/https://doi.org/{doi}"}
 
-async def publication_europepmc(query: str, limit: int = 20) -> dict:
+async def publication_europepmc(query: str, limit: Annotated[int, Field(ge=1, le=100)] = 20) -> dict:
     """Search Europe PMC for abstracts, PMIDs and open-access full-text links."""
     return {"hit_count": (data := await _get(f"{EUROPMC}/search", {"query": text(query), "format": "json", "pageSize": bounded(limit, 100)})).get("hitCount", 0),
             "articles": data.get("resultList", {}).get("result", [])}
@@ -121,4 +126,15 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def resource_catalog() -> dict:
+    """List valid publisher filters and query constraints."""
+    return {"publishers": sorted(PUBLISHERS),
+            "publisher_filter": "matches Crossref publisher or container-title, post-filtered locally",
+            "limit": "search/europepmc 1-100, related 1-50",
+            "years": "1400-3000",
+            "sources": ["Crossref works", "OpenAlex related_works", "Europe PMC search"]}
+
+
+RESOURCES = (
+    ("publications://publishers", resource_catalog),
+)

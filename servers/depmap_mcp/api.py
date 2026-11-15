@@ -1,11 +1,18 @@
 """DepMap portal datasets, cell lines, genes and drug sensitivity."""
 from __future__ import annotations
 
+from typing import Annotated
+
+from pydantic import Field
+
 from common.api import local_page
 from common.http import identifier, text, get_json
 
 API_BASE = "https://depmap.org/portal/api"
 PORTAL_BASE = "https://depmap.org/portal"
+
+Limit = Annotated[int, Field(ge=1, le=100)]
+Offset = Annotated[int, Field(ge=0, le=1_000_000)]
 
 
 def _model_id(value: str) -> str:
@@ -16,7 +23,7 @@ def _label(value: str, name: str) -> str:
     return text(value, name, 150)
 
 
-async def depmap_datasets(limit: int = 20, offset: int = 0) -> dict:
+async def depmap_datasets(limit: Limit = 20, offset: Offset = 0) -> dict:
     """List matrix datasets available for custom download with local paging."""
     rows = await get_json(f"{API_BASE}/download/datasets")
     return local_page(rows, limit, offset, source_url=f"{API_BASE}/download/datasets")
@@ -96,4 +103,17 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def depmap_endpoints() -> dict:
+    """Describe the DepMap portal endpoints and identifier conventions used by depmap_* tools."""
+    return {"api_base": API_BASE,
+            "model_id": "ACH-NNNNNN cell-line identifier",
+            "gene_symbol": "official symbol, e.g. BRAF",
+            "compound": {"required": ["compound_label", "compound_id"]},
+            "dose_curve": {"required": ["compound_id", "drc_dataset_label",
+                                        "replicate_dataset_name"]},
+            "paging": {"limit": "1-100", "offset": "0-1000000"}}
+
+
+RESOURCES = (
+    ("depmap://endpoints", depmap_endpoints),
+)

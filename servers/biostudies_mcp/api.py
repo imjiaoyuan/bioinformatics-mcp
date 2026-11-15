@@ -5,7 +5,10 @@ import csv
 import io
 from itertools import islice
 from pathlib import PurePosixPath
+from typing import Annotated, Literal
 from urllib.parse import quote, urlencode
+
+from pydantic import Field
 
 from common.http import bounded, get_json, identifier, request, text
 
@@ -38,7 +41,10 @@ def _files(study: dict, accession: str) -> list[dict]:
     return list(files.values())
 
 
-async def biostudies_search(query: str, collection: str = "arrayexpress", limit: int = 20, page: int = 1) -> dict:
+async def biostudies_search(query: str,
+                            collection: Literal["arrayexpress", "all"] = "arrayexpress",
+                            limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                            page: Annotated[int, Field(ge=1, le=1000)] = 1) -> dict:
     """Search ArrayExpress by default, or all public BioStudies using collection='all'."""
     if collection not in {"arrayexpress", "all"}:
         raise ValueError("collection must be arrayexpress or all")
@@ -54,18 +60,21 @@ async def biostudies_record(accession: str) -> dict:
     return {"study": await _study(accession), "source_url": f"{BASE}/studies/{accession}"}
 
 
-async def biostudies_files(accession: str, limit: int = 50, offset: int = 0) -> dict:
+async def biostudies_files(accession: str, limit: Annotated[int, Field(ge=1, le=200)] = 50,
+                           offset: Annotated[int, Field(ge=0, le=100000)] = 0) -> dict:
     """List files from nested study sections, including processed data and IDF/SDRF files."""
     accession = _accession(accession)
     bounded(limit, 200)
     bounded(offset, 100000, "offset", 0)
     files = _files(await _study(accession), accession)
-    return {"files": files[offset:offset + limit], "total": len(files),
+    return {"limit": limit, "offset": offset, "files": files[offset:offset + limit],
+            "total": len(files),
+            "truncated": offset + limit < len(files),
             "next_offset": offset + limit if offset + limit < len(files) else None,
-            "source_url": f"{BASE}/studies/{accession}"}
+            "pagination": "local", "source_url": f"{BASE}/studies/{accession}"}
 
 
-async def biostudies_samples(accession: str, limit: int = 20) -> dict:
+async def biostudies_samples(accession: str, limit: Annotated[int, Field(ge=1, le=200)] = 20) -> dict:
     """Read bounded SDRF assay rows. Columns are separate from rows to preserve duplicate headers."""
     accession = _accession(accession)
     bounded(limit, 200)
@@ -91,4 +100,14 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def resource_catalog() -> dict:
+    """List valid collections, accessions formats and paging bounds."""
+    return {"collections": ["arrayexpress", "all"],
+            "accession_format": "E-{ARCHIVE}-{ID} or S-{TAG}{ID} (e.g. E-MTAB-1234)",
+            "limit": "search 1-100, files/samples 1-200", "page": "1-1000",
+            "offset": "0-100000 (files)"}
+
+
+RESOURCES = (
+    ("biostudies://collections", resource_catalog),
+)

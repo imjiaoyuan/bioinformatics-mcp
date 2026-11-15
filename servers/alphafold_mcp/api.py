@@ -1,6 +1,8 @@
 """AlphaFold DB predicted-structure metadata, confidence and model file URLs."""
 from __future__ import annotations
 
+import json
+
 import httpx
 
 from common.api import json_response, local_page
@@ -99,4 +101,18 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def capabilities() -> str:
+    """Describe the AlphaFold endpoints and lookup constraints."""
+    return json.dumps({
+        "resource": "alphafold://capabilities",
+        "base": BASE,
+        "uniprot_accession_pattern": _ACCESSION_PATTERN,
+        "batch": {"max_accessions": 50, "paging": "local over collected entries"},
+        "per_model_confidence": "globalMetricValue (pLDDT) plus fraction of residues per confidence band",
+        "notes": "Model files must be downloaded from alphafold.ebi.ac.uk; this server returns URLs only.",
+    })
+
+
+RESOURCES = (
+    ("alphafold://capabilities", capabilities),
+)

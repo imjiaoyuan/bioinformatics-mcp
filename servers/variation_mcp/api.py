@@ -202,4 +202,17 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _sources() -> dict:
+    """Describe the variant data sources and their parameter constraints."""
+    return {"ensembl_variation": {"base": ENSEMBL,
+                                  "endpoints": ["/variation/{species}/{rsid}"],
+                                  "id_format": "dbSNP rs IDs (rs prefix optional); species as scientific_name slug"},
+            "ncbi_dbsnp": {"base": EUTILS,
+                           "endpoints": ["esearch (db=snp)", "esummary (db=snp)"],
+                           "requires": "NCBI_EMAIL (NCBI_API_KEY optional)",
+                           "batch_size": "1-20 rs IDs per call"}}
+
+
+RESOURCES = (
+    ("variation://sources", _sources),
+)

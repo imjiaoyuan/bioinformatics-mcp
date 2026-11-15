@@ -12,13 +12,19 @@ from __future__ import annotations
 import csv
 import gzip
 import io
-from typing import Any
+from typing import Annotated, Any, Literal
+
+from pydantic import Field
 
 from common.api import choice, local_page
 from common.http import identifier, request, text
 
 BASE = "https://panglaodb.se"
 MARKERS_URL = f"{BASE}/markers/PanglaoDB_markers_27_Mar_2020.tsv.gz"
+
+Species = Literal["both", "mouse", "human"]
+Limit = Annotated[int, Field(ge=1, le=100)]
+Offset = Annotated[int, Field(ge=0, le=1_000_000)]
 
 _COLUMNS = {
     "species": "species",
@@ -57,7 +63,7 @@ def _matches_species(row: dict[str, Any], codes: set[str]) -> bool:
     return any(code in row["species"].split() for code in codes)
 
 
-async def panglao_cell_types(species: str = "both", limit: int = 20, offset: int = 0) -> dict:
+async def panglao_cell_types(species: Species = "both", limit: Limit = 20, offset: Offset = 0) -> dict:
     """List distinct PanglaoDB cell types with their organ and marker-gene counts.
 
     Results reflect the static marker snapshot (2020-03-27), not a live view.
@@ -73,8 +79,8 @@ async def panglao_cell_types(species: str = "both", limit: int = 20, offset: int
     return local_page(listing, limit, offset, source_url=MARKERS_URL, species=species)
 
 
-async def panglao_cell_type_markers(cell_type: str, species: str = "both",
-                                    limit: int = 20, offset: int = 0) -> dict:
+async def panglao_cell_type_markers(cell_type: str, species: Species = "both",
+                                    limit: Limit = 20, offset: Offset = 0) -> dict:
     """Retrieve the marker genes recorded for one cell type (case-insensitive name).
 
     Includes ubiquitousness index, sensitivity and specificity per species, all
@@ -103,8 +109,8 @@ async def panglao_gene_markers(gene: str) -> dict:
 
 
 async def panglao_markers_by_organ(organ: str, canonical_only: bool = False,
-                                   species: str = "both", limit: int = 20,
-                                   offset: int = 0) -> dict:
+                                   species: Species = "both", limit: Limit = 20,
+                                   offset: Offset = 0) -> dict:
     """List marker genes for one organ, optionally restricted to canonical markers.
 
     Organ names are matched case-insensitively; data come from the static
@@ -121,8 +127,8 @@ async def panglao_markers_by_organ(organ: str, canonical_only: bool = False,
                       canonical_only=canonical_only)
 
 
-async def panglao_search_markers(query: str, species: str = "both",
-                                 limit: int = 20, offset: int = 0) -> dict:
+async def panglao_search_markers(query: str, species: Species = "both",
+                                 limit: Limit = 20, offset: Offset = 0) -> dict:
     """Substring-search marker rows by gene symbol, nicknames or product description.
 
     Matching is case-insensitive and bounded locally; data come from the static
@@ -149,4 +155,13 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def panglao_species() -> dict:
+    """List the species filters accepted by panglao_* tools and the snapshot they cover."""
+    return {"species": {"both": ["Mm", "Hs"], "mouse": ["Mm"], "human": ["Hs"]},
+            "snapshot": "2020-03-27", "snapshot_url": MARKERS_URL,
+            "paging": {"limit": "1-100", "offset": "0-1000000"}}
+
+
+RESOURCES = (
+    ("panglao://species", panglao_species),
+)

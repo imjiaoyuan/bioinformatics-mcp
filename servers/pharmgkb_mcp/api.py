@@ -1,6 +1,10 @@
 """PharmGKB/ClinPGx drugs, genes, variants and pharmacogenomic annotations."""
 from __future__ import annotations
 
+from typing import Annotated, Literal
+
+from pydantic import Field
+
 from common.api import choice, local_page, page
 from common.http import get_json, identifier, text
 
@@ -41,8 +45,9 @@ async def pharmgkb_variant(variant_id: str) -> dict:
             "results": rows["data"], "total": len(rows["data"])}
 
 
-async def pharmgkb_search(query: str, object_type: str = "drug", limit: int = 20,
-                          offset: int = 0) -> dict:
+async def pharmgkb_search(query: str, object_type: Literal["drug", "gene", "variant"] = "drug",
+                          limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                          offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Search drugs by name or genes/variants by symbol, with local pagination.
 
     The upstream v1 data API returns unpaginated full lists, so paging is
@@ -57,8 +62,9 @@ async def pharmgkb_search(query: str, object_type: str = "drug", limit: int = 20
                       object_type=object_type)
 
 
-async def pharmgkb_clinical_annotations(drug_id: str, limit: int = 20,
-                                        offset: int = 0) -> dict:
+async def pharmgkb_clinical_annotations(drug_id: str,
+                                        limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                                        offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Retrieve clinical annotations for one drug, with local pagination.
 
     Levels of evidence, allele-phenotype relationships and pediatric flags are
@@ -73,8 +79,10 @@ async def pharmgkb_clinical_annotations(drug_id: str, limit: int = 20,
                                  f"?relatedChemicals.accessionId={accession}")
 
 
-async def pharmgkb_annotations(drug_id: str, annotation_type: str = "guideline",
-                               limit: int = 20, offset: int = 0) -> dict:
+async def pharmgkb_annotations(drug_id: str,
+                               annotation_type: Literal["clinical", "guideline", "label"] = "guideline",
+                               limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                               offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Retrieve dosing guideline or drug-label annotations for one drug.
 
     annotation_type must be "guideline" (DPWG and other dosing guidelines) or
@@ -102,4 +110,13 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def resource_catalog() -> dict:
+    """List valid enum values and paging bounds for PharmGKB tools."""
+    return {"object_types": sorted(_TYPES), "annotation_types": sorted(_ANNOTATIONS),
+            "limit": "1-100", "offset": "0-1000000",
+            "id_format": "PA-prefixed accession (e.g. PA448498)"}
+
+
+RESOURCES = (
+    ("pharmgkb://enums", resource_catalog),
+)

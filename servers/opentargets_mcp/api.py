@@ -1,6 +1,10 @@
 """Typed, bounded Open Targets Platform GraphQL queries."""
 from __future__ import annotations
 
+from typing import Annotated, Literal
+
+from pydantic import Field
+
 from common.api import choice, json_response
 from common.http import bounded, identifier, text
 
@@ -28,8 +32,9 @@ async def _query(declarations: str, selection: str, variables: dict) -> dict:
             "data": result.get("data"), "errors": errors}
 
 
-async def opentargets_search(query: str, entity: str = "target", limit: int = 20,
-                             page: int = 0) -> dict:
+async def opentargets_search(query: str, entity: Literal["target", "disease", "drug"] = "target",
+                             limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                             page: Annotated[int, Field(ge=0, le=10000)] = 0) -> dict:
     """Search target, disease or drug entities; return IDs for subsequent typed queries."""
     choice(entity, {"target", "disease", "drug"}, "entity")
     return await _query("$query: String!, $entities: [String!], $page: Pagination",
@@ -50,7 +55,8 @@ async def opentargets_disease(disease_id: str) -> dict:
 
 
 async def opentargets_associations(target_id: str | None = None, disease_id: str | None = None,
-                                   limit: int = 20, page: int = 0) -> dict:
+                                   limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                                   page: Annotated[int, Field(ge=0, le=10000)] = 0) -> dict:
     """Rank diseases for one target or targets for one disease, retaining datasource scores."""
     if (target_id is None) == (disease_id is None):
         raise ValueError("Provide exactly one of target_id and disease_id")
@@ -71,7 +77,8 @@ async def opentargets_drug(chembl_id: str) -> dict:
                         {"id": value})
 
 
-async def opentargets_evidence(target_id: str, disease_id: str, limit: int = 20,
+async def opentargets_evidence(target_id: str, disease_id: str,
+                               limit: Annotated[int, Field(ge=1, le=100)] = 20,
                                cursor: str | None = None) -> dict:
     """Retrieve supporting evidence for a target-disease pair, preserving the next cursor."""
     variables = {"target": _target(target_id), "diseases": [_disease(disease_id)],
@@ -91,4 +98,14 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def resource_catalog() -> dict:
+    """List valid enum values and paging bounds for Open Targets tools."""
+    return {"entity": ["target", "disease", "drug"],
+            "limit": "1-100", "page": "0-10000 (zero-based index)",
+            "target_id": "ENSG00000141510", "disease_id": "EFO_0000246",
+            "drug_id": "CHEMBL prefix ChEMBL ID"}
+
+
+RESOURCES = (
+    ("opentargets://enums", resource_catalog),
+)

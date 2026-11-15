@@ -1,3 +1,4 @@
+from common.serve import register, register_status
 from mcp.server.mcpserver import MCPServer
 
 from servers.disgenet_mcp import api
@@ -5,11 +6,8 @@ from servers.disgenet_mcp import api
 
 mcp = MCPServer("disgenet")
 
-for tool in api.TOOLS:
-    mcp.add_tool(tool)
-
-for uri, resource in api.RESOURCES:
-    mcp.resource(uri)(resource)
+register(mcp, api, "disgenet")
+register_status(mcp, "disgenet")
 
 
 def main() -> None:

@@ -11,6 +11,9 @@ from __future__ import annotations
 import asyncio
 import importlib
 import json
+from typing import Annotated, Literal
+
+from pydantic import Field
 
 from common.api import choice, json_response, local_page
 from common.http import bounded, identifier, identifiers, text
@@ -20,6 +23,13 @@ RELEASE_URL = "https://census.cellxgene.cziscience.com/cellxgene-census/v1/relea
 DISCOVER_URL = "https://api.cellxgene.cziscience.com/curation/v1/datasets"
 COLLECTIONS_URL = "https://api.cellxgene.cziscience.com/curation/v1/collections"
 H5AD_BUCKET_URL = "https://cellxgene-census-public-us-west-2.s3.us-west-2.amazonaws.com/cell-census"
+Organism = Literal["homo_sapiens", "mus_musculus"]
+Limit = Annotated[int, Field(ge=1, le=100)]
+Offset = Annotated[int, Field(ge=0, le=10_000)]
+AfterJoinid = Annotated[int, Field(ge=-1, le=10_000_000_000)]
+ScanSize = Annotated[int, Field(ge=1, le=10_000)]
+CellId = Annotated[int, Field(ge=0, le=10_000_000_000)]
+
 SDK_HINT = ("The optional cellxgene-census SDK is required for cell-level Census queries; "
             "install it from the repository root with Python 3.10-3.13: pip install -e '.[cellxgene]'")
 
@@ -166,7 +176,7 @@ async def _scan_async(kind: str, organism: str, version: str, limit: int,
     return await asyncio.to_thread(_scan, kind, organism, version, limit, after_joinid, scan_size, filters)
 
 
-async def cellxgene_versions(limit: int = 20, offset: int = 0) -> dict:
+async def cellxgene_versions(limit: Limit = 20, offset: Offset = 0) -> dict:
     """List available Census versions and their release descriptions."""
     bounded(limit)
     bounded(offset, 10000, "offset", 0)
@@ -181,7 +191,7 @@ async def cellxgene_versions(limit: int = 20, offset: int = 0) -> dict:
 async def cellxgene_datasets(query: str | None = None, organism: str | None = None,
                              tissue: str | None = None, disease: str | None = None,
                              assay: str | None = None, collection_id: str | None = None,
-                             dataset_id: str | None = None, limit: int = 20, offset: int = 0) -> dict:
+                             dataset_id: str | None = None, limit: Limit = 20, offset: Offset = 0) -> dict:
     """Search curated CELLxGENE Discover datasets over the public REST API.
 
     Works without the optional SDK. Returns dataset metadata, cell counts and
@@ -210,10 +220,10 @@ async def cellxgene_datasets(query: str | None = None, organism: str | None = No
     return local_page(results, limit, offset, source_url=meta["source_url"])
 
 
-async def cellxgene_cells(organism: str = "homo_sapiens", tissue: str | None = None,
+async def cellxgene_cells(organism: Organism = "homo_sapiens", tissue: str | None = None,
                           cell_type: str | None = None, disease: str | None = None,
-                          dataset_id: str | None = None, version: str = "stable", limit: int = 20,
-                          after_joinid: int = -1, scan_size: int = 1000) -> dict:
+                          dataset_id: str | None = None, version: str = "stable", limit: Limit = 20,
+                          after_joinid: AfterJoinid = -1, scan_size: ScanSize = 1000) -> dict:
     """Filter cell metadata by exact labels within a bounded coordinate window.
 
     Requires the optional CELLxGENE SDK (Python 3.10-3.13). Cell soma_joinid
@@ -223,9 +233,9 @@ async def cellxgene_cells(organism: str = "homo_sapiens", tissue: str | None = N
                              {"tissue": tissue, "cell_type": cell_type, "disease": disease, "dataset_id": dataset_id})
 
 
-async def cellxgene_genes(organism: str = "homo_sapiens", gene_id: str | None = None,
-                          version: str = "stable", limit: int = 20,
-                          after_joinid: int = -1, scan_size: int = 1000) -> dict:
+async def cellxgene_genes(organism: Organism = "homo_sapiens", gene_id: str | None = None,
+                          version: str = "stable", limit: Limit = 20,
+                          after_joinid: AfterJoinid = -1, scan_size: ScanSize = 1000) -> dict:
     """Read gene metadata, optionally matching an exact feature ID, within a coordinate window.
 
     Requires the optional CELLxGENE SDK (Python 3.10-3.13).
@@ -235,8 +245,8 @@ async def cellxgene_genes(organism: str = "homo_sapiens", gene_id: str | None = 
     return await _scan_async("genes", organism, version, limit, after_joinid, scan_size, {"feature_id": gene_id})
 
 
-async def cellxgene_expression(cell_ids: list[int], gene_ids: list[str], version: str,
-                               organism: str = "homo_sapiens") -> dict:
+async def cellxgene_expression(cell_ids: list[CellId], gene_ids: list[str], version: str,
+                               organism: Organism = "homo_sapiens") -> dict:
     """Read raw counts for explicit cell soma_joinid values and feature IDs.
 
     Requires the optional CELLxGENE SDK (Python 3.10-3.13). Use the exact dated
@@ -295,4 +305,17 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def cellxgene_census_info() -> dict:
+    """List valid Census organisms and version/value constraints for cellxgene_* tools."""
+    return {"organisms": ["homo_sapiens", "mus_musculus"],
+            "version": "stable | latest | a dated YYYY-MM-DD Census version (see cellxgene_versions)",
+            "paging": {"limit": "1-100", "offset": "0-10000"},
+            "window_scan": {"limit": "1-100", "after_joinid": "-1 to 10000000000",
+                            "scan_size": "1-10000"},
+            "expression": {"cell_ids": "1-100 soma_joinid values, 0-10000000000 each",
+                           "gene_ids": "at most 100 feature IDs"}}
+
+
+RESOURCES = (
+    ("cellxgene://organisms", cellxgene_census_info),
+)

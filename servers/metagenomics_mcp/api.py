@@ -15,9 +15,10 @@ No files are downloaded; every response size is bounded.
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import Annotated, Any, Literal
 
 import httpx
+from pydantic import Field
 
 from common.api import bounded, choice, local_page, page
 from common.http import identifier, request, safe_url, text
@@ -64,7 +65,8 @@ def _sample_id(value: str) -> str:
 
 
 async def mgrast_projects(pi: str | None = None, name: str | None = None,
-                          limit: int = 20, offset: int = 0) -> dict:
+                          limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                          offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """List public MG-RAST projects, optionally filtered by PI or name keyword.
 
     Upstream prev/next links are preserved verbatim; paging is server-side.
@@ -103,9 +105,11 @@ async def mgrast_sample(sample_id: str) -> dict:
     return {**meta, **data}
 
 
-async def mgrast_annotation(metagenome_id: str, annotation_type: str = "organism",
-                            source: str = "RefSeq", evalue: int = 5,
-                            limit: int = 20, offset: int = 0) -> dict:
+async def mgrast_annotation(metagenome_id: str,
+                            annotation_type: Literal["organism", "function"] = "organism",
+                            source: str = "RefSeq", evalue: Annotated[int, Field(ge=1, le=100)] = 5,
+                            limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                            offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Fetch per-read annotations (organism or function) for one metagenome.
 
     Uses the streaming MG-RAST annotation endpoint with an explicit e-value
@@ -152,4 +156,16 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def resource_catalog() -> dict:
+    """List valid MG-RAST annotation types, sources per type and paging bounds."""
+    return {"annotation_types": ["organism", "function"],
+            "organism_sources": sorted(ORGANISM_SOURCES),
+            "function_sources": sorted(FUNCTION_SOURCES),
+            "id_formats": {"project": "mgp...", "metagenome": "mgm...(.version)",
+                           "sample": "mgs..."},
+            "limit": "1-100", "offset": "0-1000000", "evalue": "1-100 (e-value exponent)"}
+
+
+RESOURCES = (
+    ("metagenomics://sources", resource_catalog),
+)

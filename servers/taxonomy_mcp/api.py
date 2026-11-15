@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import os
 import xml.etree.ElementTree as ET
-from typing import Any
+from typing import Annotated, Any
 from urllib.parse import quote
+
+from pydantic import Field
 
 from common.api import local_page, page
 from common.http import bounded, identifier, request, safe_url, text
@@ -215,7 +217,8 @@ def _constituents(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             for row in rows]
 
 
-async def taxon_gbif_species(usage_key: int, limit: int = 20, offset: int = 0) -> dict:
+async def taxon_gbif_species(usage_key: Annotated[int, Field(ge=1, le=99_999_999_999)],
+                             limit: int = 20, offset: int = 0) -> dict:
     """Retrieve GBIF backbone species detail for a usage key with constituents.
 
     Returns the accepted/verbatim record (classification, basionym,
@@ -259,4 +262,17 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _databases() -> dict:
+    """List the taxonomy backends and endpoints served by this provider."""
+    return {"ncbi_taxonomy": {"db": "taxonomy",
+                              "endpoints": ["efetch (XML record with lineage)",
+                                            "esearch/esummary (search and docsums)"],
+                              "requires": "NCBI_EMAIL (NCBI_API_KEY optional)"},
+            "gbif_backbone": {"base": GBIF,
+                              "endpoints": ["/match", "/{usageKey}", "/{usageKey}/children"],
+                              "max_rows": GBIF_MAX_ROWS}}
+
+
+RESOURCES = (
+    ("taxonomy://databases", _databases),
+)

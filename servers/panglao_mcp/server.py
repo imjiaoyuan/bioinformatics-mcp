@@ -1,3 +1,4 @@
+from common.serve import register, register_status
 from mcp.server.mcpserver import MCPServer
 
 from servers.panglao_mcp import api
@@ -5,11 +6,8 @@ from servers.panglao_mcp import api
 
 mcp = MCPServer("panglao")
 
-for tool in api.TOOLS:
-    mcp.add_tool(tool)
-
-for uri, resource in api.RESOURCES:
-    mcp.resource(uri)(resource)
+register(mcp, api, "panglao")
+register_status(mcp, "panglao")
 
 
 def main() -> None:

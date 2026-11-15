@@ -12,7 +12,9 @@ to disk.
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import Field
 
 from common.api import local_page, page
 from common.http import identifier, request, text
@@ -22,6 +24,9 @@ DETAIL_URL = "https://www.ebi.ac.uk/gxa/json/experiments/{accession}"
 WEB_BASE = "https://www.ebi.ac.uk/gxa/experiments/{accession}"
 MAX_BYTES = 64_000_000
 ACCESSION_PATTERN = r"E-[A-Z]{4}-[0-9]+"
+
+Limit = Annotated[int, Field(ge=1, le=100)]
+Offset = Annotated[int, Field(ge=0, le=1_000_000)]
 
 _experiments: list[dict[str, Any]] | None = None
 _source_url: str | None = None
@@ -89,7 +94,7 @@ def _assay_groups(detail: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 async def atlas_experiments(species: str | None = None, assay: str | None = None,
-                            query: str | None = None, limit: int = 20, offset: int = 0) -> dict:
+                            query: str | None = None, limit: Limit = 20, offset: Offset = 0) -> dict:
     """List Expression Atlas experiments filtered locally by species, assay type or free text.
 
     species uses snake_case scientific names, e.g. homo_sapiens or oryza_sativa.
@@ -172,4 +177,18 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def atlas_catalogue() -> dict:
+    """Describe the Expression Atlas endpoints and filter conventions used by atlas_* tools."""
+    return {"experiments_url": EXPERIMENTS_URL,
+            "detail_url": DETAIL_URL,
+            "accession_pattern": ACCESSION_PATTERN,
+            "filters": {"species": "snake_case scientific name, e.g. homo_sapiens",
+                        "assay": "case-insensitive substring of the technology type",
+                        "query": "substring over accession, description, factors, array designs"},
+            "paging": {"limit": "1-100", "offset": "0-1000000"},
+            "note": "Catalogue is a per-process snapshot filtered and paginated locally."}
+
+
+RESOURCES = (
+    ("expressionatlas://catalogue", atlas_catalogue),
+)

@@ -1,3 +1,4 @@
+from common.serve import register, register_status
 from mcp.server.mcpserver import MCPServer
 
 from servers.emdb_mcp import api
@@ -5,11 +6,8 @@ from servers.emdb_mcp import api
 
 mcp = MCPServer("emdb")
 
-for tool in api.TOOLS:
-    mcp.add_tool(tool)
-
-for uri, resource in api.RESOURCES:
-    mcp.resource(uri)(resource)
+register(mcp, api, "emdb")
+register_status(mcp, "emdb")
 
 
 def main() -> None:

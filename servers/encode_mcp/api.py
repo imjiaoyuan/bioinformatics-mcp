@@ -16,7 +16,9 @@ Upstream quirks and caveats:
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, Literal
+
+from pydantic import Field
 
 from common.api import choice, local_page, page
 from common.http import identifier, request, text
@@ -87,7 +89,9 @@ def _file_counts(files: list[dict[str, Any]]) -> dict[str, int]:
 
 async def encode_search(query: str | None = None, assay: str | None = None,
                         biosample: str | None = None, target: str | None = None,
-                        organism: str | None = None, status: str = "released",
+                        organism: str | None = None,
+                        status: Literal["released", "revoked", "archived", "in progress",
+                                        "submitted", "all"] = "released",
                         limit: int = 20, offset: int = 0) -> dict:
     """Search ENCODE experiments with optional assay, biosample, target and organism filters.
 
@@ -230,4 +234,17 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _allowed_values() -> dict:
+    """List ENCODE filter values and identifier formats accepted by this server."""
+    return {"statuses": sorted(STATUSES),
+            "identifier_formats": {"experiment": ACCESSION, "file": FILE_ACCESSION},
+            "filters": {"assay": "exact assay_title, e.g. 'total RNA-seq'",
+                        "biosample": "biosample_ontology.term_name, e.g. 'GM12878'",
+                        "target": "target label, e.g. 'CTCF'",
+                        "organism": "organism.scientific_name, e.g. 'Homo sapiens'"},
+            "pagination": "local only; upstream rejects offset, offset+limit capped at 500"}
+
+
+RESOURCES = (
+    ("encode://statuses", _allowed_values),
+)

@@ -387,4 +387,4 @@ class AllianceTests(HTTPTestCase):
                          ["alliance_gene", "alliance_gene_phenotypes",
                           "alliance_orthologs", "alliance_search",
                           "alliance_disease_search", "alliance_alleles"])
-        self.assertEqual(api.RESOURCES, ())
+        self.assertEqual([uri for uri, _ in api.RESOURCES], ["alliance://member_databases"])

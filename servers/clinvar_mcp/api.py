@@ -11,10 +11,17 @@ import xml.etree.ElementTree as ET
 from typing import Any
 from urllib.parse import quote
 
+from typing import Annotated
+
+from pydantic import Field
+
 from common.api import local_page, page
 from common.http import identifier, identifiers, request, safe_url, text
 
 BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
+
+Limit = Annotated[int, Field(ge=1, le=100)]
+Offset = Annotated[int, Field(ge=0, le=1_000_000)]
 
 
 def _config() -> dict[str, str]:
@@ -141,7 +148,7 @@ def _parse_clinvarset(xml_text: str) -> dict[str, Any]:
             "submissions": submissions}
 
 
-async def clinvar_search(query: str, limit: int = 20, offset: int = 0) -> dict:
+async def clinvar_search(query: str, limit: Limit = 20, offset: Offset = 0) -> dict:
     """Search ClinVar variants with Entrez syntax; return matching variation UIDs and counts.
 
     Use field-qualified terms such as ``BRCA2[gene]`` and
@@ -171,7 +178,7 @@ async def clinvar_variant(variation_id: str) -> dict:
     return {**_summary(summary), "source_url": data["source_url"]}
 
 
-async def clinvar_variants(variation_ids: list[str], limit: int = 20, offset: int = 0) -> dict:
+async def clinvar_variants(variation_ids: list[str], limit: Limit = 20, offset: Offset = 0) -> dict:
     """Retrieve summaries for 1-50 ClinVar variation IDs in one esummary call.
 
     Results are sliced locally with explicit pagination metadata.
@@ -204,4 +211,17 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def clinvar_constraints() -> dict:
+    """Describe the ClinVar E-utility database, term syntax and identifier formats."""
+    return {"database": "clinvar (NCBI E-utilities)",
+            "search": "Entrez syntax, e.g. BRCA2[gene] AND Pathogenic[clinical significance]",
+            "identifiers": {"variation": "numeric ID or VCV accession",
+                            "rcv": "RCV000000000-style accession (RCV + 9 digits)",
+                            "batch_limit": "1-50 variation IDs per esummary call"},
+            "env": ["NCBI_EMAIL (required)", "NCBI_API_KEY (optional)"],
+            "paging": {"limit": "1-100", "offset": "0-1000000"}}
+
+
+RESOURCES = (
+    ("clinvar://constraints", clinvar_constraints),
+)

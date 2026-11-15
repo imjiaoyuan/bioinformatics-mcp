@@ -1,7 +1,12 @@
 """InterPro family/domain/site records, GO mappings and protein matches."""
 from __future__ import annotations
 
+import json
+from typing import Annotated, Literal
+
 import httpx
+
+from pydantic import Field
 
 from common.http import bounded, identifier, request, text
 
@@ -39,7 +44,8 @@ async def _api(path: str, params: dict | None = None) -> dict:
     return {**data, "status": "ok", "source_url": str(response.url)}
 
 
-async def interpro_search(query: str, database: str = "interpro", limit: int = 20,
+async def interpro_search(query: str, database: Literal["interpro", "pfam"] = "interpro",
+                          limit: Annotated[int, Field(ge=1, le=200)] = 20,
                           cursor: str | None = None) -> dict:
     """Search InterPro or Pfam family/domain/site entries, preserving API pagination."""
     params = {**_page(limit, cursor), "search": text(query)}
@@ -52,15 +58,19 @@ async def interpro_entry(accession: str) -> dict:
     return await _api(f"entry/{database}/{accession}")
 
 
-async def interpro_protein_annotations(accession: str, database: str = "interpro",
-                                       limit: int = 20, cursor: str | None = None) -> dict:
+async def interpro_protein_annotations(accession: str, database: Literal["interpro", "pfam"] = "interpro",
+                                       limit: Annotated[int, Field(ge=1, le=200)] = 20,
+                                       cursor: str | None = None) -> dict:
     """Get existing family/domain/site matches and their locations on a UniProt protein."""
     accession = identifier(accession.upper(), r"[A-Z0-9]{6,10}(?:-[0-9]+)?", "UniProt accession")
     return await _api(f"entry/{_database(database)}/protein/uniprot/{accession}", _page(limit, cursor))
 
 
-async def interpro_proteins(accession: str, taxon_id: int | None = None,
-                            reviewed_only: bool = True, limit: int = 20, cursor: str | None = None) -> dict:
+async def interpro_proteins(accession: str,
+                            taxon_id: Annotated[int | None, Field(ge=1, le=10_000_000)] = None,
+                            reviewed_only: bool = True,
+                            limit: Annotated[int, Field(ge=1, le=200)] = 20,
+                            cursor: str | None = None) -> dict:
     """List proteins matching a domain/family, optionally restricted to a taxon."""
     database, accession = _entry(accession)
     path = f"protein/{'reviewed' if reviewed_only else 'uniprot'}/entry/{database}/{accession}"
@@ -77,4 +87,12 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def databases() -> str:
+    """List the member databases supported by entry queries."""
+    return json.dumps({"databases": ["interpro", "pfam"],
+                       "accessions": {"interpro": "IPR[0-9]{6}", "pfam": "PF[0-9]{5}"}})
+
+
+RESOURCES = (
+    ("interpro://databases", databases),
+)

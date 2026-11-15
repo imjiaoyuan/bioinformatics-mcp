@@ -1,7 +1,9 @@
 """Bounded ClinicalTrials.gov API v2 queries (https://clinicaltrials.gov/api/v2)."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, Literal
+
+from pydantic import Field
 
 from common.api import choice
 from common.http import bounded, get_json, identifier, text
@@ -59,7 +61,10 @@ def _summary(study: dict) -> dict:
 
 async def trial_search(condition: str | None = None, intervention: str | None = None,
                        title: str | None = None, term: str | None = None,
-                       status: str | None = None, limit: int = 10,
+                       status: Literal["recruiting", "active_not_recruiting", "not_yet_recruiting",
+                                       "completed", "enrolling_by_invitation", "suspended",
+                                       "terminated", "withdrawn", "unknown"] | None = None,
+                       limit: Annotated[int, Field(ge=1, le=100)] = 10,
                        cursor: str | None = None) -> dict:
     """Search ClinicalTrials.gov studies; return matches and a cursor for the next page.
 
@@ -132,4 +137,13 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def resource_catalog() -> dict:
+    """List valid overall-status filter values and paging constraints."""
+    return {"overall_status": sorted(STATUSES),
+            "limit": "1-100 (pageSize)", "pagination": "opaque cursor via pageToken",
+            "query_params": ["query.cond", "query.intr", "query.titles", "query.term"]}
+
+
+RESOURCES = (
+    ("clinicaltrials://statuses", resource_catalog),
+)

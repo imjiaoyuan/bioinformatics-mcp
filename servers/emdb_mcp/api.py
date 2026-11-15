@@ -1,7 +1,9 @@
 """EMDB cryo-EM map entries, resolutions, map files and text search."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
+
+from pydantic import Field
 
 from common.api import json_response, page
 from common.http import bounded, identifier, text
@@ -97,7 +99,8 @@ async def emdb_map_files(emdb_id: str) -> dict:
     return {**data, "map_files": _map_records(data)}
 
 
-async def emdb_search(query: str, limit: int = 10, offset: int = 0) -> dict:
+async def emdb_search(query: str, limit: Annotated[int, Field(ge=1, le=100)] = 10,
+                      offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Search EMDB entries by free text or fielded queries (e.g. title:"apoferritin").
 
     Returns trimmed hits with identifiers and resolutions; paging is applied upstream.
@@ -131,4 +134,19 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def search_fields() -> str:
+    """Describe the EMDB search and entry endpoints and their constraints."""
+    return json.dumps({
+        "resource": "emdb://search-fields",
+        "base": BASE,
+        "emdb_id_pattern": "EMD-[0-9]+",
+        "search": {"params": {"rows": "1-100", "start": "0-1000000", "wt": "json"},
+                   "example": "title:\"apoferritin\""},
+        "endpoints": {"emdb_entry": "entry/{emdb_id}", "emdb_search": "search/{query}"},
+        "notes": "Search paging is applied upstream; entry tools return full metadata.",
+    })
+
+
+RESOURCES = (
+    ("emdb://search-fields", search_fields),
+)

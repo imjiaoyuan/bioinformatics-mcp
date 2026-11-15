@@ -1,5 +1,21 @@
 # bioinformatics-mcp
 
+Independent MCP servers for bioinformatics data services: install once, connect any MCP client, call ~380 read-only tools across 57 providers.
+
+### Human quickstart
+
+```bash
+uv tool install git+https://github.com/imjiaoyuan/bioinformatics-mcp.git
+bioinformatics-mcp list                       # browse providers by category
+bioinformatics-mcp doctor                     # verify startup, env vars, and release status
+bioinformatics-mcp config publications pdb    # print mcpServers JSON for your client
+```
+
+Keep credentials in environment variables (`NCBI_EMAIL`, `NCBI_API_KEY`, …);
+`list` names the variables each provider reads. Update with
+`bioinformatics-mcp update`, or pin installs with `--ref vX.Y.Z` (see
+docs/mcp.md).
+
 Copy the prompt below into your AI agent. 
 
 ```text

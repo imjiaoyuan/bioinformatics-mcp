@@ -1,7 +1,10 @@
 """MyGene.info gene query/annotation and MyVariant.info variant annotation."""
 from __future__ import annotations
 
+from typing import Annotated
 from urllib.parse import quote
+
+from pydantic import Field
 
 from common.http import bounded, identifier, identifiers, request, text
 
@@ -28,7 +31,8 @@ def _fields(value: str | None) -> str | None:
 
 
 async def mygene_query(query: str, fields: str | None = None, species: str | None = None,
-                       limit: int = 10, skip: int = 0) -> dict:
+                       limit: Annotated[int, Field(ge=1, le=100)] = 10,
+                       skip: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Search genes across all fields or fielded queries (e.g. symbol:cdk2).
 
     Supports MyGene.info query syntax, including wildcards, booleans and
@@ -104,4 +108,18 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _services() -> dict:
+    """Describe the MyGene.info / MyVariant.info endpoints and parameter constraints."""
+    return {"mygene": {"base": GENE_BASE,
+                       "endpoints": ["/query", "/gene/{id}", "POST /query (batch, up to 100 ids)",
+                                     "/metadata"],
+                       "constraints": {"limit(size)": "1-100", "skip(from)": "0-1000000",
+                                       "scopes": "e.g. entrezgene,ensemblgene,retired"}},
+            "myvariant": {"base": VARIANT_BASE,
+                          "endpoints": ["/variant/{hgvs_id}", "POST /variant (batch, up to 100 ids)"],
+                          "id_format": "HGVS such as chr1:g.35367G>A (hg19 coordinates)"}}
+
+
+RESOURCES = (
+    ("mygene://services", _services),
+)

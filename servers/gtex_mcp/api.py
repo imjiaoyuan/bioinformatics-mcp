@@ -1,11 +1,19 @@
 """GTEx Portal tissue list, gene search, expression and cis-eQTL data."""
 from __future__ import annotations
 
+from typing import Annotated, Literal
+
+from pydantic import Field
+
 from common.api import choice, json_response
 from common.http import bounded, identifier, text
 
 BASE = "https://gtexportal.org/api/v2"
 DATASETS = {"gtex_v8", "gtex_v10", "gtex_v11", "dgtex_v1", "gtex_snrnaseq_pilot"}
+
+Limit = Annotated[int, Field(ge=1, le=100)]
+PageIndex = Annotated[int, Field(ge=0, le=10_000)]
+DatasetId = Literal["gtex_v8", "gtex_v10", "gtex_v11", "dgtex_v1", "gtex_snrnaseq_pilot"]
 TISSUE = r"[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9-]+)*"
 GENCODE = r"[A-Za-z][A-Za-z0-9_.-]*"
 
@@ -28,20 +36,20 @@ async def gtex_service_info() -> dict:
     return await _get("", {})
 
 
-async def gtex_tissue_list(limit: int = 20, page: int = 0) -> dict:
+async def gtex_tissue_list(limit: Limit = 20, page: PageIndex = 0) -> dict:
     """List GTEx tissues with sample counts, eGene/sGene counts and ontology identifiers."""
     return await _get("dataset/tissueSiteDetail", _page(limit, page))
 
 
-async def gtex_gene_search(gene: str, limit: int = 20, page: int = 0) -> dict:
+async def gtex_gene_search(gene: str, limit: Limit = 20, page: PageIndex = 0) -> dict:
     """Search GTEx reference genes by symbol, GENCODE ID or Ensembl ID; return coordinates."""
     params = {**_page(limit, page), "geneId": text(gene, "gene", 100)}
     return await _get("reference/gene", params)
 
 
 async def gtex_median_gene_expression(gencode_id: str, tissue_id: str | None = None,
-                                      dataset_id: str = "gtex_v10",
-                                      limit: int = 20, page: int = 0) -> dict:
+                                      dataset_id: DatasetId = "gtex_v10",
+                                      limit: Limit = 20, page: PageIndex = 0) -> dict:
     """Retrieve median gene expression in TPM across tissues for one gene.
 
     tissue_id is an optional upper-camel-case tissue such as Brain_Cerebellum.
@@ -55,8 +63,8 @@ async def gtex_median_gene_expression(gencode_id: str, tissue_id: str | None = N
 
 
 async def gtex_gene_expression(gencode_id: str, tissue_id: str,
-                               dataset_id: str = "gtex_v10",
-                               limit: int = 20, page: int = 0) -> dict:
+                               dataset_id: DatasetId = "gtex_v10",
+                               limit: Limit = 20, page: PageIndex = 0) -> dict:
     """Retrieve per-sample normalized gene expression for one gene in one tissue."""
     params = {**_page(limit, page),
               "gencodeId": identifier(gencode_id, GENCODE, "gencode_id"),
@@ -66,8 +74,8 @@ async def gtex_gene_expression(gencode_id: str, tissue_id: str,
 
 
 async def gtex_eqtl(gencode_id: str | None = None, tissue_id: str | None = None,
-                    variant_id: str | None = None, dataset_id: str = "gtex_v10",
-                    limit: int = 20, page: int = 0) -> dict:
+                    variant_id: str | None = None, dataset_id: DatasetId = "gtex_v10",
+                    limit: Limit = 20, page: PageIndex = 0) -> dict:
     """Retrieve significant single-tissue cis-eQTLs filtered by gene, tissue or variant.
 
     Provide at least one filter; gencode_id is a versioned GENCODE ID such as
@@ -95,4 +103,13 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def gtex_datasets() -> dict:
+    """List the valid GTEx dataset identifiers accepted by dataset_id parameters."""
+    return {"datasets": sorted(DATASETS),
+            "tissue_id": "Upper-camel-case tissue site, e.g. Brain_Cerebellum",
+            "paging": {"itemsPerPage": "1-100", "page": "0-10000"}}
+
+
+RESOURCES = (
+    ("gtex://datasets", gtex_datasets),
+)

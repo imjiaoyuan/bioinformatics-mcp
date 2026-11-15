@@ -1,6 +1,9 @@
 """MSigDB gene set collections, gene set details and curated gene members."""
 from __future__ import annotations
 
+import json
+from typing import Literal
+
 from common.api import local_page
 from common.http import identifier, identifiers, request, text
 
@@ -75,12 +78,12 @@ def _summary(name: str, entry: dict, source_url: str) -> dict:
             "genes": entry.get("geneSymbols", []), "source_url": source_url}
 
 
-async def msigdb_gene_set(species: str, gene_set: str) -> dict:
+async def msigdb_gene_set(species: Literal["human", "mouse"], gene_set: str) -> dict:
     """Retrieve one gene set's collection, systematic name, PMID, links and genes."""
     return await _fetch_gene_set(species, gene_set)
 
 
-async def msigdb_gene_set_genes(species: str, gene_set: str, limit: int = 100,
+async def msigdb_gene_set_genes(species: Literal["human", "mouse"], gene_set: str, limit: int = 100,
                                 offset: int = 0) -> dict:
     """List the curated gene members of one gene set with local pagination."""
     result = await _fetch_gene_set(species, gene_set)
@@ -89,7 +92,7 @@ async def msigdb_gene_set_genes(species: str, gene_set: str, limit: int = 100,
     return {**result, **page}
 
 
-async def msigdb_gene_sets(species: str, gene_sets: list[str]) -> dict:
+async def msigdb_gene_sets(species: Literal["human", "mouse"], gene_sets: list[str]) -> dict:
     """Retrieve summaries for 1-25 named gene sets in one species."""
     _species(species)
     names = [_name(value) for value in identifiers(gene_sets, 25)]
@@ -104,7 +107,7 @@ async def msigdb_gene_sets(species: str, gene_sets: list[str]) -> dict:
             "source_url": f"{BASE}/{species}/geneset/"}
 
 
-async def msigdb_collections(species: str) -> dict:
+async def msigdb_collections(species: Literal["human", "mouse"]) -> dict:
     """List the documented MSigDB collections and subcollections for one species."""
     _species(species)
     return {"species": species, "collections": COLLECTIONS[species],
@@ -128,4 +131,11 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def collections() -> str:
+    """List the documented MSigDB collections per species."""
+    return json.dumps({"species": sorted(SPECIES), "collections": COLLECTIONS})
+
+
+RESOURCES = (
+    ("msigdb://collections", collections),
+)

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-import httpx
+from typing import Annotated, Literal
 from urllib.parse import urlencode
 
-from common.http import bounded, get_json, identifier, text
+from pydantic import Field
+
+from common.http import bounded, get_json, identifier, request, text
 from common.cncb import search_payload
 
 BASE = "https://ngdc.cncb.ac.cn/gwh/api/public"
@@ -39,8 +41,7 @@ def _genbase(value: str) -> str:
 
 
 async def _get(path: str):
-    async with httpx.AsyncClient(timeout=60) as c:
-        r = await c.get(BASE + path); r.raise_for_status(); return r.json()
+    return (await request("GET", BASE + path, timeout=60)).json()
 
 
 async def _get_url(url: str, params: dict | None = None):
@@ -66,19 +67,26 @@ async def cncb_biosample(accession: str) -> dict:
 async def cncb_genbase_fasta(accession: str) -> dict:
     """Retrieve a nucleotide or protein sequence from CNCB GenBase as FASTA."""
     accession = _genbase(accession)
-    async with httpx.AsyncClient(timeout=90) as c:
-        r = await c.get(f"{NGDC}/genbase/api/file/fasta", params={"acc": accession})
-        r.raise_for_status()
-    return {"accession": accession, "fasta": r.text}
+    response = await request("GET", f"{NGDC}/genbase/api/file/fasta",
+                             params={"acc": accession}, timeout=90)
+    return {"accession": accession, "fasta": response.text}
 
-async def cncb_icg_record(record_type: str, accession: str) -> dict:
+RecordType = Literal["species", "project", "gene", "publication"]
+
+
+async def cncb_icg_record(record_type: RecordType, accession: str) -> dict:
     """Get an Internal Control Genes (ICG) species, project, gene, or publication record."""
     paths = {"species": "species", "project": "project", "gene": "gene", "publication": "publication"}
     if record_type not in paths:
         raise ValueError("record_type must be species, project, gene, or publication")
     return await _get_url(f"{NGDC}/icg/api/json/{paths[record_type]}/{_accession(accession)}")
 
-async def cncb_search(query: str, database: str = "gsa", limit: int = 10) -> dict:
+Database = Literal["gsa", "gwh", "bioproject", "biosample", "omix", "hra", "gvm",
+                   "gwas", "methbank", "lncbook"]
+
+
+async def cncb_search(query: str, database: Database = "gsa",
+                      limit: Annotated[int, Field(ge=1, le=100)] = 10) -> dict:
     """Keyword-search CNCB-NGDC records (BIG Search), e.g. GSA raw-data studies.
 
     Use this to find Chinese-archive submissions that do not always appear in
@@ -120,4 +128,11 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _databases() -> dict:
+    """List the BIG Search database ids accepted by cncb_search."""
+    return {"organization": "CNCB-NGDC", "searchable_databases": dict(sorted(SEARCHABLE_DATABASES.items()))}
+
+
+RESOURCES = (
+    ("cncb://databases", _databases),
+)

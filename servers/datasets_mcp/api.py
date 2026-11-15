@@ -15,9 +15,10 @@ allowing whole-genome dumps.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, Literal
 
 import httpx
+from pydantic import Field
 
 from common.api import choice
 from common.http import bounded, get_json, identifier as valid_id
@@ -41,8 +42,10 @@ async def _reports(path: str, params: dict | None = None) -> tuple[list, dict[st
     return reports, metadata
 
 
-async def dataset_assemblies(taxon: str, source: str = "any", level: str = "any",
-                             limit: int = 20, offset: int = 0) -> dict:
+async def dataset_assemblies(taxon: str, source: Literal["any", "refseq", "genbank"] = "any",
+                             level: Literal["any", "complete", "chromosome", "scaffold", "contig"] = "any",
+                             limit: Annotated[int, Field(ge=1, le=200)] = 20,
+                             offset: Annotated[int, Field(ge=0, le=100_000)] = 0) -> dict:
     """List genome assembly dataset reports for a taxon (taxid or name, e.g. 3702 or arabidopsis thaliana).
 
     Filters: source is any|refseq|genbank, level is any|complete|chromosome|
@@ -70,7 +73,7 @@ async def dataset_assemblies(taxon: str, source: str = "any", level: str = "any"
             break
         params["page_token"] = token
     rows = reports[offset:offset + limit]
-    return {"taxon": taxon, "reports": rows, "limit": limit, "offset": offset,
+    return {"taxon": taxon, "reports": rows, "results": rows, "limit": limit, "offset": offset,
             "total": len(rows), "total_count": total_count,
             "truncated": bool(metadata.get("next_page_token")) or offset + limit < len(reports),
             "pagination": "upstream-token + local slice", "source_url": f"{BASE}{path}"}
@@ -97,7 +100,7 @@ async def dataset_assembly(accession: str) -> dict:
 
 
 async def dataset_genes(taxon: str, symbol: str | None = None, gene_id: str | None = None,
-                        limit: int = 20) -> dict:
+                        limit: Annotated[int, Field(ge=1, le=500)] = 20) -> dict:
     """Retrieve gene dataset reports for a taxon, by gene id (e.g. 830878) or by species-scoped symbol.
 
     Either symbol or gene_id is REQUIRED: the whole-taxon gene listing is
@@ -120,7 +123,9 @@ async def dataset_genes(taxon: str, symbol: str | None = None, gene_id: str | No
     reports, metadata = await _reports(path)
     rows = reports[:limit]
     return {"taxon": taxon, **({"symbol": symbol} if symbol is not None else {"gene_id": gene_id}),
-            "reports": rows, "total": len(rows), "truncated": len(rows) < len(reports),
+            "reports": rows, "results": rows, "limit": limit, "offset": 0,
+            "total": len(rows), "truncated": len(rows) < len(reports),
+            "pagination": "local",
             **({"messages": metadata["messages"]} if "messages" in metadata else {}),
             "source_url": f"{BASE}{path}"}
 
@@ -151,4 +156,21 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _endpoints() -> dict:
+    """Describe the NCBI Datasets v2 endpoints and parameter constraints."""
+    return {"upstream": BASE,
+            "endpoints": {"/genome/taxon/{taxon}/dataset_report": "assembly reports; page_size/page_token upstream, sliced locally",
+                          "/genome/accession/{accession}/dataset_report": "one GCF_/GCA_ assembly",
+                          "/gene/taxon/{taxon}/dataset_report": "refused here (unbounded); use symbol or gene id forms",
+                          "/gene/symbol/{symbol}/taxon/{taxon}/dataset_report": "species-scoped gene reports",
+                          "/gene/id/{gene_id}/dataset_report": "one gene id",
+                          "/taxonomy/taxon/{taxon}/dataset_report": "taxonomy report"},
+            "constraints": {"taxon": "NCBI taxid or scientific/common name",
+                            "assembly_source": ["any", "refseq", "genbank"],
+                            "assembly_level": ["any", "complete", "chromosome", "scaffold", "contig"],
+                            "limit": "dataset_assemblies 1-200; dataset_genes 1-500"}}
+
+
+RESOURCES = (
+    ("datasets://reports", _endpoints),
+)

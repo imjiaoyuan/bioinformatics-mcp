@@ -4,12 +4,19 @@ from __future__ import annotations
 import csv
 import io
 import json
+from typing import Annotated, Literal
+
+from pydantic import Field
 
 from common.api import choice, json_response, page
 from common.http import identifier, identifiers, text
 
 BASE = "https://api.gdc.cancer.gov"
 FILE_FIELDS = "file_id,file_name,file_size,md5sum,state,access,data_type,data_category,data_format,analysis.workflow_type,cases.case_id,cases.submitter_id,cases.project.project_id,cases.samples.submitter_id,cases.samples.sample_type"
+
+Access = Literal["open", "controlled"]
+Limit = Annotated[int, Field(ge=1, le=100)]
+Offset = Annotated[int, Field(ge=0, le=1_000_000)]
 
 
 def _uuid(value: str) -> str:
@@ -39,14 +46,14 @@ async def _search(endpoint: str, filters: dict, fields: str, limit: int, offset:
 
 
 async def gdc_projects(program: str | None = "TCGA", primary_site: str | None = None,
-                       limit: int = 20, offset: int = 0) -> dict:
+                       limit: Limit = 20, offset: Offset = 0) -> dict:
     """List projects, optionally filtered by program and primary site."""
     return await _search("projects", _filters({"program.name": program, "primary_site": primary_site}),
                          "project_id,name,program.name,primary_site,disease_type", limit, offset)
 
 
 async def gdc_cases(project_id: str, sample_type: str | None = None,
-                    limit: int = 20, offset: int = 0) -> dict:
+                    limit: Limit = 20, offset: Offset = 0) -> dict:
     """Retrieve case, demographic, diagnosis and sample metadata for a project."""
     project_id = identifier(project_id)
     return await _search("cases", _filters({"project.project_id": project_id,
@@ -56,8 +63,8 @@ async def gdc_cases(project_id: str, sample_type: str | None = None,
 
 
 async def gdc_files(project_id: str, data_type: str | None = None,
-                    workflow: str | None = None, access: str = "open",
-                    limit: int = 20, offset: int = 0) -> dict:
+                    workflow: str | None = None, access: Access = "open",
+                    limit: Limit = 20, offset: Offset = 0) -> dict:
     """Find files; file counts do not represent distinct patients or samples."""
     choice(access, {"open", "controlled"}, "access")
     return await _search("files", _filters({"cases.project.project_id": identifier(project_id),
@@ -106,4 +113,17 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def gdc_search_fields() -> dict:
+    """Describe the GDC API endpoints, access levels and filter fields used by gdc_* tools."""
+    return {"base": BASE,
+            "endpoints": ["projects", "cases", "files", "files/{file_id}",
+                          "files (POST manifest via filters)", "data/{file_id}"],
+            "access": ["open", "controlled"],
+            "file_fields": FILE_FIELDS.split(","),
+            "paging": {"limit": "1-100", "offset": "0-1000000"},
+            "note": "Pagination is performed upstream (size/from); totals come from GDC."}
+
+
+RESOURCES = (
+    ("gdc://projects", gdc_search_fields),
+)

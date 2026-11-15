@@ -119,4 +119,15 @@ TOOLS = (
     hgnc_aliases,
 )
 
-RESOURCES = ()
+
+def _fields() -> dict:
+    """List the HGNC doc fields returned by this server and its fetch endpoints."""
+    return {"upstream": BASE_URL,
+            "endpoints": ["/fetch/hgnc_id/HGNC:{id}", "/fetch/symbol/{symbol}", "/search/{query}"],
+            "returned_doc_fields": list(_DOC_FIELDS),
+            "pagination": "upstream ignores rows/start; results are paginated locally (docs capped at 100)"}
+
+
+RESOURCES = (
+    ("hgnc://fields", _fields),
+)

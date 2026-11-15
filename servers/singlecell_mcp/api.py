@@ -2,12 +2,19 @@
 from __future__ import annotations
 
 import json
+from typing import Annotated, Literal
+
+from pydantic import Field
 
 from common.api import choice, json_response
 from common.http import bounded, identifier, text
 
 AZUL = "https://service.azul.data.humancellatlas.org/index"
 SCP = "https://singlecell.broadinstitute.org/single_cell/api/v1"
+
+Entity = Literal["projects", "samples", "files"]
+HcaLimit = Annotated[int, Field(ge=1, le=50)]
+PageNumber = Annotated[int, Field(ge=1, le=1000)]
 
 
 def _accession(value: str) -> str:
@@ -19,8 +26,8 @@ def _uuid(value: str) -> str:
                       "HCA project UUID")
 
 
-async def hca_search(entity: str = "projects", field: str | None = None, value: str | None = None,
-                     limit: int = 10, cursor: str | None = None) -> dict:
+async def hca_search(entity: Entity = "projects", field: str | None = None, value: str | None = None,
+                     limit: HcaLimit = 10, cursor: str | None = None) -> dict:
     """Search HCA Azul projects, samples or files; page with the returned cursor token.
 
     The Azul index has no free-text query: filter by providing a metadata field and
@@ -49,7 +56,7 @@ async def hca_project(project_uuid: str) -> dict:
     return {**source, **data}
 
 
-async def scp_search_studies(query: str, page_number: int = 1) -> dict:
+async def scp_search_studies(query: str, page_number: PageNumber = 1) -> dict:
     """Search public Broad Single Cell Portal studies by keyword; returns matching accessions."""
     params = {"type": "study", "terms": text(query, 500), "page": bounded(page_number, 1000, "page_number", 1)}
     data, source = await json_response(f"{SCP}/search", params)
@@ -92,4 +99,13 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def singlecell_entities() -> dict:
+    """List the searchable HCA entity types and the endpoint constraints of both sources."""
+    return {"hca_entities": ["projects", "samples", "files"],
+            "hca_paging": {"size": "1-50", "cursor": "search_after token from the previous page"},
+            "scp": {"accession_pattern": "SCP[0-9]+", "page_number": "1-1000"}}
+
+
+RESOURCES = (
+    ("singlecell://entities", singlecell_entities),
+)

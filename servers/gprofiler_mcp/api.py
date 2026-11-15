@@ -1,10 +1,18 @@
 """g:Profiler enrichment, identifier conversion and ortholog mapping."""
 from __future__ import annotations
 
+import json
+from typing import Annotated, Literal
+
+from pydantic import Field
+
 from common.http import bounded, identifier, identifiers, request
 
 BASE = "https://biit.cs.ut.ee/gprofiler/api"
 SOURCES = {"GO:BP", "GO:MF", "GO:CC", "REAC", "WP", "HP", "CORUM", "KEGG"}
+
+CorrectionMethod = Literal["g_SCS", "fdr", "bonferroni"]
+ConvertTarget = Literal["ENTREZGENE_ACC", "ENSG", "UNIPROTSWISSPROT"]
 
 
 async def _post(path: str, body: dict, limit: int) -> dict:
@@ -14,12 +22,14 @@ async def _post(path: str, body: dict, limit: int) -> dict:
         raise ValueError("g:Profiler returned an unexpected response")
     rows = data["result"]
     return {"result": rows[:limit], "total_results": len(rows), "truncated": len(rows) > limit,
+            "limit": limit, "offset": 0, "pagination": "local",
             "meta": data.get("meta", {}), "source_url": url}
 
 
 async def gprofiler_enrichment(genes: list[str], organism: str = "hsapiens",
                                sources: list[str] | None = None, background: list[str] | None = None,
-                               threshold: float = 0.05, correction: str = "g_SCS", limit: int = 100) -> dict:
+                               threshold: float = 0.05, correction: CorrectionMethod = "g_SCS",
+                               limit: Annotated[int, Field(ge=1, le=500)] = 100) -> dict:
     """Run functional enrichment, optionally against the experimentally detected gene background."""
     bounded(limit, 500)
     sources = sources if sources is not None else ["GO:BP", "GO:MF", "GO:CC"]
@@ -35,8 +45,9 @@ async def gprofiler_enrichment(genes: list[str], organism: str = "hsapiens",
     return await _post("gost/profile", body, limit)
 
 
-async def gprofiler_convert(genes: list[str], organism: str = "hsapiens", target: str = "ENTREZGENE_ACC",
-                            limit: int = 100) -> dict:
+async def gprofiler_convert(genes: list[str], organism: str = "hsapiens",
+                            target: ConvertTarget = "ENTREZGENE_ACC",
+                            limit: Annotated[int, Field(ge=1, le=1000)] = 100) -> dict:
     """Convert a list of gene identifiers; retain unmapped and ambiguous mappings."""
     bounded(limit, 1000)
     if target not in {"ENTREZGENE_ACC", "ENSG", "UNIPROTSWISSPROT"}:
@@ -46,7 +57,8 @@ async def gprofiler_convert(genes: list[str], organism: str = "hsapiens", target
 
 
 async def gprofiler_orthologs(genes: list[str], organism: str = "hsapiens",
-                             target_organism: str = "mmusculus", limit: int = 100) -> dict:
+                             target_organism: str = "mmusculus",
+                             limit: Annotated[int, Field(ge=1, le=1000)] = 100) -> dict:
     """Map genes to orthologs in another supported organism; preserve one-to-many results."""
     bounded(limit, 1000)
     return await _post("orth/orth", {"query": identifiers(genes), "organism": identifier(organism),
@@ -60,4 +72,14 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def sources() -> str:
+    """List enrichment data sources, correction methods and convert targets."""
+    return json.dumps({"sources": sorted(SOURCES),
+                       "correction_methods": ["g_SCS", "fdr", "bonferroni"],
+                       "convert_targets": ["ENTREZGENE_ACC", "ENSG", "UNIPROTSWISSPROT"],
+                       "threshold": "0 < threshold <= 1"})
+
+
+RESOURCES = (
+    ("gprofiler://sources", sources),
+)

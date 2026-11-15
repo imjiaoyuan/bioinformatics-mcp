@@ -7,6 +7,10 @@ redistributing results.
 """
 from __future__ import annotations
 
+from typing import Annotated
+
+from pydantic import Field
+
 from common.api import json_response, local_page
 from common.http import identifier, text
 
@@ -42,6 +46,9 @@ _PATHOLOGY_KEYS = ("RNA cancer specificity", "RNA cancer distribution",
                    "Blood concentration - Conc. blood IM [pg/L]",
                    "Blood concentration - Conc. blood MS [pg/L]")
 
+Limit = Annotated[int, Field(ge=1, le=100)]
+Offset = Annotated[int, Field(ge=0, le=1_000_000)]
+
 
 def _gene(value: str) -> str:
     return identifier(value.upper(), r"[A-Za-z0-9][A-Za-z0-9_.+-]*", "gene")
@@ -74,7 +81,7 @@ async def _record(gene: str, keys: tuple[str, ...]) -> dict:
     raise ValueError(f"No Human Protein Atlas record matches gene {target}")
 
 
-async def hpa_search(query: str, limit: int = 20, offset: int = 0) -> dict:
+async def hpa_search(query: str, limit: Limit = 20, offset: Offset = 0) -> dict:
     """Search Human Protein Atlas genes by name, synonym or annotation term.
 
     Slices the byte-bounded upstream result locally; consult the licence
@@ -122,4 +129,17 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def hpa_fields() -> dict:
+    """List the HPA record field groups returned by each hpa_* tool."""
+    return {"search": "free-text gene query; results are sliced locally",
+            "hpa_gene": list(_SUMMARY_KEYS),
+            "hpa_tissue_expression": list(_TISSUE_KEYS),
+            "hpa_cell_expression": list(_CELL_KEYS),
+            "hpa_subcellular_location": list(_SUBCELL_KEYS),
+            "hpa_pathology": list(_PATHOLOGY_KEYS),
+            "paging": {"limit": "1-100", "offset": "0-1000000"}}
+
+
+RESOURCES = (
+    ("hpa://fields", hpa_fields),
+)

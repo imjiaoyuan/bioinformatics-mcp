@@ -1,7 +1,11 @@
 from __future__ import annotations
 import re
+from typing import Annotated, Literal
 
-from common.http import bounded, get_json, identifier as valid_id, identifiers, request, text
+from pydantic import Field
+
+from common.api import json_response
+from common.http import bounded, identifier as valid_id, identifiers, request, text
 
 BASE = "https://rest.ensembl.org"
 
@@ -31,12 +35,13 @@ def _region(value: str) -> str:
         value = rest
     return valid_id(value, _REGION, "region")
 
-async def _get(path: str, params: dict | None = None) -> dict | list:
-    return await get_json(BASE + path, {**(params or {}), "content-type": "application/json"})
+async def _get(path: str, params: dict | None = None, *, ttl: int = 0) -> dict | list:
+    data, _ = await json_response(BASE + path, {**(params or {}), "content-type": "application/json"}, ttl=ttl)
+    return data
 
 async def ensembl_lookup(identifier: str, expand: bool = False) -> dict:
     """Look up an Ensembl gene, transcript, variant, or other stable ID."""
-    return await _get(f"/lookup/id/{_stable_id(identifier)}", {"expand": 1 if expand else 0})
+    return await _get(f"/lookup/id/{_stable_id(identifier)}", {"expand": 1 if expand else 0}, ttl=300)
 
 _SYMBOL = r"[A-Za-z0-9_.:|-]+"
 
@@ -50,15 +55,19 @@ async def ensembl_lookup_symbol(symbol: str, species: str = "oryza_sativa") -> d
 
 async def ensembl_xrefs(identifier: str) -> list:
     """Find external database cross-references for an Ensembl identifier."""
-    return await _get(f"/xrefs/id/{_stable_id(identifier)}")
+    return await _get(f"/xrefs/id/{_stable_id(identifier)}", ttl=300)
 
-async def ensembl_overlap(region: str, feature: str = "gene", species: str = "human") -> list:
+OverlapFeature = Literal["gene", "transcript", "cds", "exon", "variation", "regulatory"]
+
+
+async def ensembl_overlap(region: str, feature: OverlapFeature = "gene", species: str = "human") -> list:
     """Return Ensembl features overlapping a region such as  human:7:140424943-140624564."""
     if feature not in {"gene", "transcript", "cds", "exon", "variation", "regulatory"}:
         raise ValueError("unsupported feature")
     return await _get(f"/overlap/region/{_species_name(species)}/{_region(region)}", {"feature": feature})
 
-async def ensembl_species(query: str = "rice", division: str = "EnsemblPlants", limit: int = 30) -> dict:
+async def ensembl_species(query: str = "rice", division: str = "EnsemblPlants",
+                          limit: Annotated[int, Field(ge=1, le=500)] = 30) -> dict:
     """Find supported species and their assembly/release identifiers, defaulting to plants.
 
     Divisions: EnsemblPlants, EnsemblFungi, EnsemblMetazoa, EnsemblBacteria (the
@@ -78,7 +87,9 @@ async def ensembl_species(query: str = "rice", division: str = "EnsemblPlants", 
     data = response.json()
     matches = [s for s in data.get("species", []) if query in " ".join(
         str(s.get(k, "")) for k in ("name", "display_name", "common_name", "aliases")).lower()]
-    return {"species": matches[:limit], "total": len(matches), "truncated": len(matches) > limit,
+    return {"species": matches[:limit], "results": matches[:limit], "limit": limit,
+            "offset": 0, "total": len(matches), "truncated": len(matches) > limit,
+            "pagination": "local",
             "source_url": f"{BASE}/info/species?division={division}"}
 
 async def ensembl_lookup_batch(ids: list[str], species: str = "oryza_sativa") -> dict:
@@ -90,7 +101,9 @@ async def ensembl_lookup_batch(ids: list[str], species: str = "oryza_sativa") ->
                              json={"ids": values}, retryable=True)
     return {"species": species, "records": response.json(), "source_url": url}
 
-async def ensembl_sequence(identifier: str, sequence_type: str = "genomic", max_length: int = 100000) -> dict:
+async def ensembl_sequence(identifier: str,
+                           sequence_type: Literal["genomic", "cdna", "cds", "protein"] = "genomic",
+                           max_length: Annotated[int, Field(ge=1, le=1_000_000)] = 100000) -> dict:
     """Fetch a stable-ID sequence with assembly/version descriptors; use transcript/translation IDs for protein."""
     identifier = _stable_id(identifier)
     bounded(max_length, 1_000_000, "max_length")
@@ -103,8 +116,10 @@ async def ensembl_sequence(identifier: str, sequence_type: str = "genomic", max_
     return {"sequences": records, "source_url": f"{BASE}/sequence/id/{identifier}?type={sequence_type}"}
 
 async def ensembl_homologs(identifier: str, species: str = "oryza_sativa",
-                          target_species: str | None = None, homology_type: str = "orthologues",
-                          compara: str = "plants", limit: int = 20) -> dict:
+                           target_species: str | None = None,
+                           homology_type: Literal["orthologues", "paralogues", "all"] = "orthologues",
+                           compara: Literal["plants", "fungi", "metazoa"] = "plants",
+                           limit: Annotated[int, Field(ge=1, le=200)] = 20) -> dict:
     """Get orthologs/paralogs using a Genomes Compara database (plants, fungi or metazoa)."""
     identifier, species = _stable_id(identifier), _species_name(species)
     compara = valid_id(compara.strip().lower())
@@ -120,7 +135,9 @@ async def ensembl_homologs(identifier: str, species: str = "oryza_sativa",
     data = await _get(path, params)
     rows = [h for item in data.get("data", []) for h in item.get("homologies", [])]
     return {"identifier": identifier, "species": species, "homologies": rows[:limit],
-            "total": len(rows), "truncated": len(rows) > limit, "source_url": BASE + path}
+            "results": rows[:limit], "limit": limit, "offset": 0,
+            "total": len(rows), "truncated": len(rows) > limit, "pagination": "local",
+            "source_url": BASE + path}
 
 
 async def ensembl_variation(species: str, variant_id: str) -> dict:
@@ -132,7 +149,9 @@ async def ensembl_variation(species: str, variant_id: str) -> dict:
     data = await _get(path)
     return {"species": species, "variant": data, "source_url": BASE + path}
 
-async def ensembl_region_variants(species: str, region: str, limit: int = 20, offset: int = 0) -> dict:
+async def ensembl_region_variants(species: str, region: str,
+                                  limit: Annotated[int, Field(ge=1, le=200)] = 20,
+                                  offset: Annotated[int, Field(ge=0, le=10_000)] = 0) -> dict:
     """List variation features in a genomic region (verified for arabidopsis_thaliana,
     saccharomyces_cerevisiae and oryza_sativa; drosophila_melanogaster returns an
     empty list in live probing). Results are paginated locally with limit/offset."""
@@ -144,8 +163,10 @@ async def ensembl_region_variants(species: str, region: str, limit: int = 20, of
     path = f"/overlap/region/{species}/{region}"
     rows = await _get(path, {"feature": "variation"})
     page = rows[offset:offset + limit]
-    return {"species": species, "region": region, "variants": page, "total": len(rows),
+    return {"species": species, "region": region, "variants": page, "results": page,
+            "limit": limit, "total": len(rows),
             "offset": offset, "truncated": offset + limit < len(rows),
+            "pagination": "local",
             "source_url": f"{BASE}{path}?feature=variation"}
 
 
@@ -163,4 +184,18 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _allowed_values() -> dict:
+    """List Ensembl REST enum values accepted by this server's tools."""
+    return {"overlap_features": ["gene", "transcript", "cds", "exon", "variation", "regulatory"],
+            "sequence_types": ["genomic", "cdna", "cds", "protein"],
+            "homology_types": ["orthologues", "paralogues", "all"],
+            "compara_databases": ["plants", "fungi", "metazoa"],
+            "divisions": ["Ensembl", "EnsemblPlants", "EnsemblFungi", "EnsemblMetazoa", "EnsemblBacteria"],
+            "limits": {"ensembl_species.limit": 500, "ensembl_homologs.limit": 200,
+                       "ensembl_region_variants.limit": 200, "ensembl_region_variants.offset": 10000,
+                       "ensembl_sequence.max_length": 1_000_000}}
+
+
+RESOURCES = (
+    ("ensembl://features", _allowed_values),
+)

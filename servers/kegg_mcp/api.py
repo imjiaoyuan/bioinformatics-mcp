@@ -5,7 +5,9 @@ remains subject to the KEGG license terms and must not be redistributed.
 """
 from __future__ import annotations
 
+import json
 import re
+from typing import Literal
 
 from common.api import choice, local_page
 from common.http import identifier, request, text
@@ -19,6 +21,14 @@ DATABASES = {
 GET_OPTIONS = {"aaseq", "ntseq", "mol", "kcf", "conf", "kgml", "json"}
 FIND_OPTIONS = {"formula", "exact_mass", "mol_weight", "nop"}
 ORGANISM = re.compile(r"[a-z]{3,4}|T[0-9]{5}")
+
+DatabaseName = Literal["pathway", "module", "ko", "genes", "genome", "compound", "glycan",
+                       "reaction", "rclass", "enzyme", "network", "disease", "drug", "dgroup"]
+GetOption = Literal["aaseq", "ntseq", "mol", "kcf", "conf", "kgml", "json"]
+FindOption = Literal["formula", "exact_mass", "mol_weight", "nop"]
+ConvTarget = Literal["pathway", "module", "ko", "genes", "genome", "compound", "glycan",
+                     "reaction", "rclass", "enzyme", "network", "disease", "drug", "dgroup",
+                     "ncbi-geneid", "ncbi-proteinid", "uniprot", "pubchem", "chebi"]
 
 
 def _db(database: str) -> str:
@@ -58,7 +68,7 @@ async def _get_text(path: str) -> tuple[str, dict]:
     return response.text, {"source_url": str(response.url)}
 
 
-async def kegg_list(database: str, organism: str | None = None, limit: int = 20,
+async def kegg_list(database: DatabaseName, organism: str | None = None, limit: int = 20,
                     offset: int = 0) -> dict:
     """List entry identifiers and names for a KEGG database, optionally per organism.
 
@@ -70,7 +80,7 @@ async def kegg_list(database: str, organism: str | None = None, limit: int = 20,
     return local_page(_parse_table(body), limit, offset, **source)
 
 
-async def kegg_find(database: str, query: str, option: str | None = None,
+async def kegg_find(database: DatabaseName, query: str, option: FindOption | None = None,
                     limit: int = 20, offset: int = 0) -> dict:
     """Find KEGG entries matching a keyword, or a formula/mass/molecular-weight query.
 
@@ -86,7 +96,7 @@ async def kegg_find(database: str, query: str, option: str | None = None,
     return local_page(_parse_table(body), limit, offset, **source)
 
 
-async def kegg_get(entry_ids: list[str], option: str | None = None) -> dict:
+async def kegg_get(entry_ids: list[str], option: GetOption | None = None) -> dict:
     """Retrieve up to 10 KEGG entries in flat file format, with an optional field view.
 
     Options: aaseq, ntseq, mol, kcf, conf, kgml, json; kgml and json take one pathway
@@ -99,7 +109,7 @@ async def kegg_get(entry_ids: list[str], option: str | None = None) -> dict:
     return {**source, "entry_ids": entries, "text": body[:100_000]}
 
 
-async def kegg_link(target_db: str, entry_ids: list[str], limit: int = 20,
+async def kegg_link(target_db: DatabaseName, entry_ids: list[str], limit: int = 20,
                     offset: int = 0) -> dict:
     """Find entries in target_db cross-referenced by up to 10 KEGG entries.
 
@@ -111,7 +121,7 @@ async def kegg_link(target_db: str, entry_ids: list[str], limit: int = 20,
     return local_page(_parse_table(body), limit, offset, **source)
 
 
-async def kegg_conv(target_db: str, entry_ids: list[str], limit: int = 20,
+async def kegg_conv(target_db: ConvTarget, entry_ids: list[str], limit: int = 20,
                     offset: int = 0) -> dict:
     """Convert up to 10 KEGG identifiers to or from outside identifiers.
 
@@ -134,4 +144,15 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def databases() -> str:
+    """List KEGG databases and the option sets supported by this server."""
+    return json.dumps({"databases": sorted(DATABASES),
+                       "get_options": sorted(GET_OPTIONS),
+                       "find_options": sorted(FIND_OPTIONS),
+                       "conv_targets": sorted(DATABASES | {"ncbi-geneid", "ncbi-proteinid",
+                                                           "uniprot", "pubchem", "chebi"})})
+
+
+RESOURCES = (
+    ("kegg://databases", databases),
+)

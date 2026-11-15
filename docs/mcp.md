@@ -36,6 +36,35 @@ result as JSON, and fails with the available tool names when the tool is
 unknown. It reads credentials from the inherited environment, so export
 `NCBI_EMAIL` and similar variables first.
 
+### Doctor, updates, and version pinning
+
+MCP has no update notification, so updating is a first-class CLI capability:
+
+```bash
+bioinformatics-mcp doctor              # checks every provider: startup, required env, release status
+bioinformatics-mcp doctor ncbi pdb     # check a subset; --offline skips the release check
+bioinformatics-mcp update              # upgrades via `uv tool upgrade` or pip, then reprints the version
+```
+
+`doctor` compares the installed version with the latest GitHub release and
+prints the upgrade command when they differ. Every server also exposes a
+`meta://status` resource returning `{version, latest, outdated}` so an agent
+can notice staleness during a session and run `bioinformatics-mcp update`.
+
+The `--uvx` entries re-resolve the git branch on every client launch: they
+follow the default branch automatically but need network access at startup.
+Pin a release instead with `--ref`:
+
+```bash
+bioinformatics-mcp config ncbi --uvx --ref v0.3.0
+```
+
+`register` also removes entries: `bioinformatics-mcp register ncbi --remove
+--config <path>` deletes only the named entries and fails if an entry is not
+present. Aggregated serve entries default to the key `bioinformatics`; use
+`config --serve --name <alias>` to register several different provider sets
+side by side.
+
 The manual development-install examples below use `<REPOSITORY_ROOT>` for the absolute path of the cloned
 `bioinformatics-mcp` checkout. Examples configure one or two servers; repeat
 the entry shape for each additional command you need. Prefer the smallest set
@@ -299,3 +328,15 @@ them — when in doubt, write literal values or export variables and omit
 3. For `ncbi-mcp`, confirm `NCBI_EMAIL` reached the process (a call fails
    fast with a validation error when it is missing). For error shapes and
    rate limits, see the per-provider notes in the README.
+
+## Releasing
+
+Updates that agents can detect depend on tagged releases:
+
+1. Bump `version` in `pyproject.toml`, run `python -m compileall -q servers`
+   and `pytest`, then commit.
+2. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z` — the GitHub
+   release becomes the `latest` that `doctor` and `meta://status` compare
+   against.
+3. Run `bioinformatics-mcp doctor` after upgrading to confirm every provider
+   starts and the version is current.

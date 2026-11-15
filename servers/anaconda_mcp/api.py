@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-import httpx
+from typing import Annotated
 
-from common.http import bounded, identifier, text
+from pydantic import Field
+
+from common.http import bounded, identifier, request, text
 
 BASE = "https://api.anaconda.org"
 
@@ -13,11 +15,10 @@ def _name(value: str, name: str = "package") -> str:
 
 
 async def _get(path: str, params: dict | None = None):
-    async with httpx.AsyncClient(timeout=45) as c:
-        r = await c.get(BASE + path, params=params); r.raise_for_status(); return r.json()
+    return (await request("GET", BASE + path, params=params)).json()
 
 
-async def anaconda_search(query: str, limit: int = 20) -> list[dict]:
+async def anaconda_search(query: str, limit: Annotated[int, Field(ge=1, le=100)] = 20) -> list[dict]:
     """Search public Anaconda packages and channels."""
     limit = bounded(limit, 100)
     data = await _get("/search", {"name": text(query)})
@@ -46,4 +47,14 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def resource_catalog() -> dict:
+    """Describe Anaconda.org endpoints and parameter constraints."""
+    return {"endpoints": {"/search?name=": "package/channel search (truncated locally to limit)",
+                          "/package/{owner}/{package}": "package metadata",
+                          "/package/{owner}/{package} (files key)": "downloadable conda files"},
+            "limit": "1-100", "slug_format": "[A-Za-z0-9_][A-Za-z0-9._-]*"}
+
+
+RESOURCES = (
+    ("anaconda://endpoints", resource_catalog),
+)

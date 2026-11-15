@@ -172,4 +172,16 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _endpoints() -> dict:
+    """Describe the SRA server's Entrez endpoints and parameter constraints."""
+    return {"upstream": "NCBI E-utilities (db=sra)",
+            "endpoints": {"sra_search": "esearch esearch + UIDs; limit/offset map to retmax/retstart",
+                          "sra_run_metadata": "esummary for one SRR/ERR/DRR run accession",
+                          "sra_studies": "esearch+esummary grouped into SRP/ERP/DRP studies"},
+            "constraints": {"limit": "1-100 (default 20)", "offset": "0-1000000",
+                            "accessions": "SRR|ERR|DRR runs for sra_run_metadata"}}
+
+
+RESOURCES = (
+    ("sra://endpoints", _endpoints),
+)

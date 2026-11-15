@@ -13,11 +13,13 @@ import xml.etree.ElementTree as ET
 from dataclasses import replace
 from html.parser import HTMLParser
 from collections import OrderedDict
-from typing import Any
+from typing import Annotated, Any, Literal
 from urllib.parse import quote_plus
 from urllib.parse import urlencode
 from urllib.parse import urljoin
 from urllib.parse import quote
+
+from pydantic import Field
 
 from common.http import bounded, identifier, identifiers, request, text
 from common.api import choice
@@ -36,6 +38,11 @@ ALLOWED_DATABASES = {
     "assembly", "bioproject", "biosample", "clinvar", "omim", "taxonomy",
     "gds", "geoprofiles",
 }
+DatabaseName = Literal["assembly", "bioproject", "biosample", "clinvar", "gene", "gds",
+                       "geoprofiles", "nucleotide", "nuccore", "omim", "pmc", "pubmed",
+                       "protein", "sra", "taxonomy"]
+FetchFormat = Literal["json", "xml", "fasta", "gb", "gbwithparts"]
+EntryType = Literal["", "series", "sample", "platform"]
 _cache: OrderedDict[str, tuple[float, Any]] = OrderedDict()
 
 
@@ -76,7 +83,7 @@ def _db(database: str) -> str:
     return database
 
 
-async def ncbi_search(database: str, query: str, max_results: int = 20, offset: int = 0) -> dict[str, Any]:
+async def ncbi_search(database: DatabaseName, query: str, max_results: int = 20, offset: int = 0) -> dict[str, Any]:
     """Search an NCBI Entrez database using its query syntax and return IDs."""
     database = _db(database)
     max_results = max(1, min(max_results, 1000))
@@ -89,7 +96,7 @@ async def ncbi_search(database: str, query: str, max_results: int = 20, offset: 
             "ids": result.get("idlist", []), "translation": result.get("querytranslation")}
 
 
-async def ncbi_summary(database: str, ids: list[str]) -> dict[str, Any]:
+async def ncbi_summary(database: DatabaseName, ids: list[str]) -> dict[str, Any]:
     """Return compact metadata for up to 200 IDs from an NCBI database."""
     database = _db(database)
     if not ids or len(ids) > 200:
@@ -98,7 +105,7 @@ async def ncbi_summary(database: str, ids: list[str]) -> dict[str, Any]:
     return {"database": database, "result": data.get("result", {})}
 
 
-async def ncbi_fetch(database: str, ids: list[str], format: str = "json") -> dict[str, Any]:
+async def ncbi_fetch(database: DatabaseName, ids: list[str], format: FetchFormat = "json") -> dict[str, Any]:
     """Fetch records. Use json/xml for metadata, fasta for sequence records."""
     database = _db(database)
     format = format.lower()
@@ -113,13 +120,12 @@ async def ncbi_fetch(database: str, ids: list[str], format: str = "json") -> dic
     email, tool, api_key = _config()
     params.update(email=email, tool=tool)
     if api_key: params["api_key"] = api_key
-    async with httpx.AsyncClient(timeout=90) as client:
-        response = await client.get(f"{BASE_URL}/efetch.fcgi", params=params)
-    response.raise_for_status()
+    response = await request("GET", f"{BASE_URL}/efetch.fcgi", params=params,
+                             timeout=90, interval=0.11 if api_key else 0.35)
     return {"database": database, "format": format, "content": response.text}
 
 
-async def ncbi_link(database: str, ids: list[str], target_database: str) -> dict[str, Any]:
+async def ncbi_link(database: DatabaseName, ids: list[str], target_database: DatabaseName) -> dict[str, Any]:
     """Find related records in another Entrez database."""
     database, target_database = _db(database), _db(target_database)
     if not ids or len(ids) > 200:
@@ -133,7 +139,7 @@ async def pubmed_search(
     max_results: int = 20,
     min_date: str | None = None,
     max_date: str | None = None,
-    sort: str = "relevance",
+    sort: Literal["relevance", "pub date", "first author", "journal name"] = "relevance",
     include_summaries: bool = True,
 ) -> dict[str, Any]:
     """Search PubMed and optionally return citation metadata.
@@ -309,7 +315,7 @@ async def sra_search(
     strategy: str = "",
     platform: str = "",
     source: str = "",
-    limit: int = 20,
+    limit: Annotated[int, Field(ge=1, le=100)] = 20,
 ) -> dict[str, Any]:
     """Search NCBI SRA raw-read archives with exact structured fields.
 
@@ -415,7 +421,7 @@ async def _sra_runs_for_accessions(accessions: list[str], limit: int) -> list[di
     return await _sra_runs(ids, limit)
 
 
-async def sra_files(accessions: list[str], limit: int = 30) -> dict[str, Any]:
+async def sra_files(accessions: list[str], limit: Annotated[int, Field(ge=1, le=100)] = 30) -> dict[str, Any]:
     """Expand SRA accessions to runs and list direct download URLs; do not download.
 
     Accepts run, experiment, study, or sample accessions (SRR/ERR/DRR runs,
@@ -711,12 +717,14 @@ async def _discovery_gsa(f: Filters, limit: int) -> dict:
 
 
 async def find_data(
-    organism: str = "", data_type: str = "", condition: str = "", entry_type: str = "series",
-    archives: str = "geo,sra,ena,gsa", limit: int = 10,
+    organism: str = "", data_type: str = "", condition: str = "",
+    entry_type: EntryType = "series",
+    archives: str = "geo,sra,ena,gsa", limit: Annotated[int, Field(ge=1, le=100)] = 10,
     tissue: str = "", assay: str = "", platforms: list[str] | None = None,
     read_type: str = "any", protocol: str = "any", sample_scope: str = "any",
     sample_type: str = "any", pairing: str = "any", file_format: str = "any",
-    include_descendants: bool = False, offset: int = 0, metadata_limit: int = 10,
+    include_descendants: bool = False, offset: int = 0,
+    metadata_limit: Annotated[int, Field(ge=0, le=20)] = 10,
 ) -> dict[str, Any]:
     """Find data with independent biological/technical constraints and per-criterion evidence.
 
@@ -786,10 +794,10 @@ async def find_data(
 
 async def geo_search(
     query: str = "",
-    limit: int = 20,
+    limit: Annotated[int, Field(ge=1, le=100)] = 20,
     organism: str = "",
     data_type: str = "",
-    entry_type: str = "",
+    entry_type: EntryType = "",
 ) -> dict[str, Any]:
     """Search GEO with biology-oriented filters.
 
@@ -885,7 +893,7 @@ async def _geo_file_urls(accession: str) -> list[str]:
     return files
 
 
-async def geo_files(accession: str, limit: int = 30) -> dict[str, Any]:
+async def geo_files(accession: str, limit: Annotated[int, Field(ge=1, le=100)] = 30) -> dict[str, Any]:
     """List actual GEO series matrices/supplements or sample supplements; do not download them."""
     accession = _geo_accession(accession)
     bounded(limit)
@@ -897,7 +905,7 @@ async def geo_files(accession: str, limit: int = 30) -> dict[str, Any]:
             "truncated": len(files) > limit, "source_url": base}
 
 
-async def download_plan(accessions: list[str], limit: int = 500) -> dict[str, Any]:
+async def download_plan(accessions: list[str], limit: Annotated[int, Field(ge=1, le=2000)] = 500) -> dict[str, Any]:
     """Build a batch download plan for GEO and SRA accessions; do not download.
 
     Accepts a mix of GSE/GSM and SRR/ERR/DRR/SRX/SRP accessions. GEO files
@@ -951,7 +959,7 @@ async def download_plan(accessions: list[str], limit: int = 500) -> dict[str, An
                     "reported here; SRA .sra objects need fasterq-dump to convert."}
 
 
-async def geo_metadata(accessions: list[str], limit: int = 500) -> dict[str, Any]:
+async def geo_metadata(accessions: list[str], limit: Annotated[int, Field(ge=1, le=5000)] = 500) -> dict[str, Any]:
     """Harvest sample-level metadata from GEO series for meta-analysis.
 
     For each GSE, reads the full SOFT sample block and returns one row per
@@ -1050,8 +1058,9 @@ def _blast_status_of(body: str) -> str:
 
 async def blast_submit(
     sequence: str,
-    program: str = "blastp",
-    database: str = "swissprot",
+    program: Literal["blastp", "blastn", "blastx", "tblastn", "tblastx"] = "blastp",
+    database: Literal["swissprot", "nr", "nt", "refseq_rna", "refseq_protein",
+                      "refseq_genomic", "pdb", "pataa", "patnt", "env_nr", "env_nt"] = "swissprot",
     email: str | None = None,
     job_title: str = "",
 ) -> dict[str, Any]:
@@ -1131,9 +1140,9 @@ _BLAST_FORMAT_TYPES = {"text": "Text", "html": "HTML", "json": "JSON2_S"}
 
 async def blast_results(
     rid: str,
-    format: str = "text",
-    alignments: int = 5,
-    descriptions: int = 10,
+    format: Literal["text", "html", "json"] = "text",
+    alignments: Annotated[int, Field(ge=1, le=100)] = 5,
+    descriptions: Annotated[int, Field(ge=1, le=500)] = 10,
 ) -> dict[str, Any]:
     """Fetch BLAST results for an RID; never blocks or sleeps server-side.
 
@@ -1199,6 +1208,14 @@ def databases() -> str:
     return json.dumps(sorted(ALLOWED_DATABASES))
 
 
+def _blast_values() -> dict:
+    """List the BLAST URL-API enums and bounds accepted by this server."""
+    return {"programs": sorted(BLAST_PROGRAMS), "databases": sorted(BLAST_DATABASES),
+            "result_formats": sorted(_BLAST_FORMAT_TYPES),
+            "limits": {"alignments": "1-100", "descriptions": "1-500",
+                       "poll_interval": "blast_status at most once per minute"}}
+
+
 TOOLS = (
     ncbi_search,
     ncbi_summary,
@@ -1222,4 +1239,5 @@ TOOLS = (
 
 RESOURCES = (
     ("ncbi://databases", databases),
+    ("ncbi://blast", _blast_values),
 )

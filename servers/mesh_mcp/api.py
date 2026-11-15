@@ -21,7 +21,9 @@ service, so a SPARQL contains-search would duplicate it.
 """
 from __future__ import annotations
 from xml.etree import ElementTree
-from typing import Any
+from typing import Annotated, Any, Literal
+
+from pydantic import Field
 
 from common.api import choice, json_response, local_page, page
 from common.http import identifier, request, safe_url, text
@@ -68,8 +70,9 @@ async def _tree_codes(mesh_ids: list[str]) -> dict[str, list[str]]:
     return codes
 
 
-async def mesh_lookup(label: str, match: str = "exact", limit: int = 20,
-                      offset: int = 0) -> dict:
+async def mesh_lookup(label: str, match: Literal["exact", "contains"] = "exact",
+                      limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                      offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Look up MeSH descriptors by label with exact or contains matching.
 
     Uses the NLM label lookup service; each hit is enriched with its tree
@@ -139,7 +142,8 @@ async def mesh_entry(mesh_id: str) -> dict:
             "properties": properties}
 
 
-async def mesh_tree(mesh_id: str, limit: int = 20, offset: int = 0) -> dict:
+async def mesh_tree(mesh_id: str, limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                    offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """List tree positions and their parents for one MeSH descriptor.
 
     Resolves the descriptor's tree number roots and walks their subtree in the
@@ -169,4 +173,17 @@ TOOLS = (
     mesh_tree,
 )
 
-RESOURCES = ()
+
+def resource_catalog() -> dict:
+    """Describe MeSH lookup scopes, id formats and paging bounds."""
+    return {"match": ["exact", "contains"],
+            "id_formats": {"D": "TopicalDescriptor", "Q": "Qualifier",
+                           "C": "supplementary concept (SCR_*)"},
+            "mesh_tree_ids": "D-prefixed descriptors only",
+            "limit": "1-100", "offset": "0-1000000",
+            "sparql_limit": SPARQL_LIMIT}
+
+
+RESOURCES = (
+    ("mesh://scopes", resource_catalog),
+)

@@ -1,7 +1,9 @@
 """CIViC precision oncology knowledgebase: genes, variants and evidence items."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, Literal
+
+from pydantic import Field
 
 from common.api import choice, json_response, local_page
 from common.http import bounded, identifier, text
@@ -16,6 +18,11 @@ EVIDENCE_FIELDS = ("id name description evidenceType evidenceLevel evidenceDirec
                    "disease { id name } therapies { id name } phenotypes { id name } "
                    "source { id title citation }")
 VARIANT_FIELDS = ("id name variantAliases variantTypes { id name } feature { id name } link")
+
+Entity = Literal["ASSERTION", "DISEASE", "EVIDENCE_ITEM", "FEATURE", "MOLECULAR_PROFILE",
+                 "THERAPY", "VARIANT", "VARIANT_GROUP"]
+Limit = Annotated[int, Field(ge=1, le=100)]
+Offset = Annotated[int, Field(ge=0, le=1_000_000)]
 
 
 def _id(value: str, name: str) -> int:
@@ -51,8 +58,8 @@ def _paged(result: dict, path: list[str], limit: int, offset: int) -> dict:
     return page
 
 
-async def civic_search(query: str, entity: str = "FEATURE", limit: int = 20,
-                       offset: int = 0) -> dict:
+async def civic_search(query: str, entity: Entity = "FEATURE", limit: Limit = 20,
+                       offset: Offset = 0) -> dict:
     """Search CIViC genes/features, variants, evidence items, assertions, therapies or diseases.
 
     The upstream search is unpaginated; results are sliced locally.
@@ -81,7 +88,7 @@ async def civic_gene(gene_id: str | None = None, entrez_symbol: str | None = Non
                                               "Entrez symbol")})
 
 
-async def civic_gene_variants(gene_id: str, limit: int = 20, offset: int = 0,
+async def civic_gene_variants(gene_id: str, limit: Limit = 20, offset: Offset = 0,
                               cursor: str | None = None) -> dict:
     """List curated variants of one gene, keeping the upstream cursor for deep paging."""
     variables = {"id": _id(gene_id, "gene"), "first": bounded(limit),
@@ -105,7 +112,7 @@ async def civic_evidence_item(evidence_id: str) -> dict:
                         {"id": _id(evidence_id, "evidence item")})
 
 
-async def civic_variant_evidence(variant_id: str, limit: int = 20, offset: int = 0,
+async def civic_variant_evidence(variant_id: str, limit: Limit = 20, offset: Offset = 0,
                                  cursor: str | None = None) -> dict:
     """List evidence items supporting one variant, keeping the upstream cursor for deep paging."""
     variables = {"id": _id(variant_id, "variant"), "first": bounded(limit),
@@ -127,4 +134,13 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def civic_entities() -> dict:
+    """List the CIViC entity types accepted by civic_search."""
+    return {"entities": sorted(ENTITIES),
+            "note": "civic_gene_variants and civic_variant_evidence also support "
+                    "deep paging with the upstream GraphQL end_cursor."}
+
+
+RESOURCES = (
+    ("civic://entities", civic_entities),
+)

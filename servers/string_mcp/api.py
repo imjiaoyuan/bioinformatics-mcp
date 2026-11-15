@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-import httpx
+import json
+from typing import Annotated
 
-from common.http import bounded
+from pydantic import Field
+
+from common.http import bounded, request
 
 BASE = "https://string-db.org/api"
 
@@ -23,17 +26,18 @@ def _proteins(values: list[str], maximum: int) -> list[str]:
 
 
 async def _get(endpoint: str, params: dict) -> list[dict]:
-    async with httpx.AsyncClient(timeout=60) as client:
-        r = await client.get(f"{BASE}/json/{endpoint}", params=params); r.raise_for_status()
-        return r.json()
+    response = await request("GET", f"{BASE}/json/{endpoint}", params=params, timeout=60)
+    return response.json()
 
 
-async def string_resolve(proteins: list[str], species: int = 9606) -> list[dict]:
+async def string_resolve(proteins: list[str], species: Annotated[int, Field(ge=1, le=10_000_000)] = 9606) -> list[dict]:
     """Resolve gene/protein names to STRING identifiers."""
     return await _get("get_string_ids", {"identifiers": "\r".join(_proteins(proteins, 100)), "species": _species(species)})
 
 
-async def string_interactions(proteins: list[str], species: int = 9606, required_score: int = 400, limit: int = 100) -> list[dict]:
+async def string_interactions(proteins: list[str], species: Annotated[int, Field(ge=1, le=10_000_000)] = 9606,
+                              required_score: Annotated[int, Field(ge=0, le=1000)] = 400,
+                              limit: Annotated[int, Field(ge=1, le=1000)] = 100) -> list[dict]:
     """Get protein-protein interaction edges from STRING, returning at most limit edges.
 
     The limit caps returned edges locally; it does not expand the input protein set.
@@ -45,7 +49,7 @@ async def string_interactions(proteins: list[str], species: int = 9606, required
     return (await _get("network", params))[:bounded(limit, 1000)]
 
 
-async def string_enrichment(proteins: list[str], species: int = 9606) -> list[dict]:
+async def string_enrichment(proteins: list[str], species: Annotated[int, Field(ge=1, le=10_000_000)] = 9606) -> list[dict]:
     """Run GO/pathway functional enrichment for a protein list."""
     return await _get("enrichment", {"identifiers": "\r".join(_proteins(proteins, 2000)), "species": _species(species)})
 
@@ -57,4 +61,19 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def constraints() -> str:
+    """Describe STRING endpoint constraints used by this server."""
+    return json.dumps({
+        "resource": "string://constraints",
+        "species": "NCBI taxonomy ID between 1 and 10000000",
+        "endpoints": {
+            "string_resolve": {"max_proteins": 100, "name_length": "1-100 chars, no commas/whitespace"},
+            "string_interactions": {"max_proteins": 100, "required_score": "0-1000", "limit": "1-1000 edges"},
+            "string_enrichment": {"max_proteins": 2000},
+        },
+    })
+
+
+RESOURCES = (
+    ("string://constraints", constraints),
+)

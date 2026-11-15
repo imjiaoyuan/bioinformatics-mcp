@@ -1,3 +1,4 @@
+from common.serve import register, register_status
 from mcp.server.mcpserver import MCPServer
 
 from servers.gtex_mcp import api
@@ -5,11 +6,8 @@ from servers.gtex_mcp import api
 
 mcp = MCPServer("gtex")
 
-for tool in api.TOOLS:
-    mcp.add_tool(tool)
-
-for uri, resource in api.RESOURCES:
-    mcp.resource(uri)(resource)
+register(mcp, api, "gtex")
+register_status(mcp, "gtex")
 
 
 def main() -> None:

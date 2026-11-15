@@ -1,11 +1,19 @@
 """BiGG genome-scale metabolic models, reactions and metabolites."""
 from __future__ import annotations
 
+import json
+from typing import Annotated, Literal
+
+from pydantic import Field
+
 from common.api import choice, json_response, local_page, page
 from common.http import bounded, identifier, text
 
 BASE = "https://bigg.ucsd.edu/api/v2"
 _SEARCH_TYPES = {"models", "reactions", "metabolites", "genes"}
+SearchType = Literal["models", "reactions", "metabolites", "genes"]
+Limit = Annotated[int, Field(ge=1, le=100)]
+Offset = Annotated[int, Field(ge=0, le=1_000_000)]
 
 
 def _id(value: str, name: str = "identifier") -> str:
@@ -23,7 +31,7 @@ def _slice(data: dict, limit: int, offset: int) -> dict:
                       source_url=data["source_url"])
 
 
-async def bigg_models(limit: int = 50, offset: int = 0) -> dict:
+async def bigg_models(limit: Limit = 50, offset: Offset = 0) -> dict:
     """List available genome-scale models with organism and component counts.
 
     Results are paged locally; the upstream list endpoint has no pagination.
@@ -36,7 +44,7 @@ async def bigg_model(model_bigg_id: str) -> dict:
     return await _get(f"/models/{_id(model_bigg_id, 'model_bigg_id')}")
 
 
-async def bigg_model_reactions(model_bigg_id: str, limit: int = 50, offset: int = 0) -> dict:
+async def bigg_model_reactions(model_bigg_id: str, limit: Limit = 50, offset: Offset = 0) -> dict:
     """List reactions in one model with names, stoichiometry summaries and bounds.
 
     Results are paged locally; the upstream list endpoint has no pagination.
@@ -45,7 +53,7 @@ async def bigg_model_reactions(model_bigg_id: str, limit: int = 50, offset: int 
     return _slice(await _get(f"/models/{model_bigg_id}/reactions"), limit, offset)
 
 
-async def bigg_model_metabolites(model_bigg_id: str, limit: int = 50, offset: int = 0) -> dict:
+async def bigg_model_metabolites(model_bigg_id: str, limit: Limit = 50, offset: Offset = 0) -> dict:
     """List metabolites in one model with names, compartments and model links.
 
     Results are paged locally; the upstream list endpoint has no pagination.
@@ -69,7 +77,8 @@ async def bigg_metabolite(model_bigg_id: str, metabolite_bigg_id: str) -> dict:
     return await _get(f"/models/{model_bigg_id}/metabolites/{_id(metabolite_bigg_id, 'metabolite_bigg_id')}")
 
 
-async def bigg_search(query: str, search_type: str = "reactions", limit: int = 50, offset: int = 0) -> dict:
+async def bigg_search(query: str, search_type: SearchType = "reactions",
+                      limit: Limit = 50, offset: Offset = 0) -> dict:
     """Search models, reactions, metabolites or genes by identifier substring.
 
     Valid search_type values are models, reactions, metabolites and genes.
@@ -92,4 +101,13 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def search_types() -> str:
+    """List the BiGG search types and paging constraints."""
+    return json.dumps({"search_types": sorted(_SEARCH_TYPES),
+                       "paging": {"limit": "1-100", "offset": "0-1000000", "mode": "local"},
+                       "identifier_pattern": "[A-Za-z0-9_][A-Za-z0-9_.+[]()!-]*"})
+
+
+RESOURCES = (
+    ("bigg://search-types", search_types),
+)

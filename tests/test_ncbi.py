@@ -403,7 +403,7 @@ class BlastTests(HTTPTestCase):
                     self.assertEqual(request.url.params.get("RID"), "FJW4U2V8014")
                     return httpx.Response(200, text=_STATUS_HTML.format(status=state))
 
-                http._last_request.clear()
+                http._next_slot.clear()
                 with self.mock_http(handler):
                     result = await api.blast_status("FJW4U2V8014")
                 self.assertEqual(result["status"], state)
@@ -417,14 +417,14 @@ class BlastTests(HTTPTestCase):
             await api.blast_status("short")
 
     async def test_results_waiting_returns_retry_hint(self):
-        http._last_request.clear()
+        http._next_slot.clear()
         with self.mock_http(_blast_router(status="WAITING", results_body=_STATUS_HTML.format(status="WAITING"))):
             result = await api.blast_results("FJW4U2V8014")
         self.assertEqual(result["status"], "waiting")
         self.assertEqual(result["retry_after_seconds"], 60)
 
     async def test_results_json_shape(self):
-        http._last_request.clear()
+        http._next_slot.clear()
         with self.mock_http(_blast_router(results_body=_JSON_RESULTS)):
             result = await api.blast_results("FJW4U2V8014", format="json")
         self.assertEqual(result["status"], "ready")
@@ -441,14 +441,14 @@ class BlastTests(HTTPTestCase):
 
     async def test_results_text_verbatim(self):
         report = "Sequences producing significant alignments: ...\nAlignment lines"
-        http._last_request.clear()
+        http._next_slot.clear()
         with self.mock_http(_blast_router(results_body=report)):
             result = await api.blast_results("FJW4U2V8014")
         self.assertEqual(result["content"], report)
         self.assertFalse(result["truncated"])
 
     async def test_results_no_hits_found(self):
-        http._last_request.clear()
+        http._next_slot.clear()
         with self.mock_http(_blast_router(results_body="<pre>No hits found</pre>")):
             result = await api.blast_results("FJW4U2V8014")
         self.assertEqual(result["status"], "ready")

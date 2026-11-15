@@ -10,8 +10,13 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
+# One lock per host guards only the microsecond-sized "claim the next time
+# slot" section below; sleeping, response transfer, and retries run outside
+# the lock so slow responses never serialize unrelated requests.
 _locks: dict[str, asyncio.Lock] = {}
-_last_request: dict[str, float] = {}
+_next_slot: dict[str, float] = {}
+_client: httpx.AsyncClient | None = None
+_client_loop: asyncio.AbstractEventLoop | None = None
 _PRIVATE_PARAMETERS = {"apikey", "ncbiapikey", "accesskey", "accesstoken", "token",
                        "authorization", "password", "secret", "clientsecret", "email"}
 
@@ -64,56 +69,84 @@ def identifiers(values: list[str], maximum: int = 1000) -> list[str]:
     return [text(value, "identifier", 150) for value in values]
 
 
+async def _shared_client(timeout: float) -> httpx.AsyncClient:
+    """Reuse one connection pool per event loop instead of handshaking per request."""
+    global _client, _client_loop
+    loop = asyncio.get_running_loop()
+    if _client is None or _client_loop is not loop:
+        if _client is not None and _client_loop is not None and not _client_loop.is_closed():
+            await _client.aclose()
+        _client = httpx.AsyncClient(
+            timeout=timeout, follow_redirects=True,
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            headers={"User-Agent": "bioinformatics-mcp/0.1"})
+        _client_loop = loop
+    return _client
+
+
+async def _reserve_slot(host: str, interval: float) -> None:
+    async with _locks.setdefault(host, asyncio.Lock()):
+        now = time.monotonic()
+        scheduled = max(_next_slot.get(host, now), now)
+        _next_slot[host] = scheduled + interval
+    if scheduled > now:
+        await asyncio.sleep(scheduled - now)
+
+
 async def request(method: str, url: str, *, params: dict | None = None,
                   json: Any = None, data: dict | None = None,
                   headers: dict[str, str] | None = None,
                   max_bytes: int = 8_000_000, interval: float = 0.35,
-                  retryable: bool = False) -> httpx.Response:
-    """Bound responses and retry transient GET failures or explicitly idempotent requests once."""
+                  retryable: bool = False, timeout: float = 45.0,
+                  retry_after_header: str = "Retry-After",
+                  retry_after_cap: float = 5.0) -> httpx.Response:
+    """Bound responses and retry transient GET failures or explicitly idempotent requests once.
+
+    The per-host interval limits the request rate; it never serializes response
+    transfer because each request claims a start time and then runs unlocked.
+    """
     host = urlsplit(url).netloc
-    lock = _locks.setdefault(host, asyncio.Lock())
-    async with lock:
-        for attempt in range(2):
-            await asyncio.sleep(max(0, interval - (time.monotonic() - _last_request.get(host, 0))))
-            try:
-                async with httpx.AsyncClient(timeout=45, follow_redirects=True,
-                                             headers={"User-Agent": "bioinformatics-mcp/0.1", **(headers or {})}) as client:
-                    async with client.stream(method, url, params=params, json=json, data=data) as response:
-                        if (method == "GET" or retryable) and response.status_code in {429, 500, 502, 503, 504} and attempt == 0:
-                            try:
-                                delay = min(5.0, max(1.0, float(response.headers.get("Retry-After", "1"))))
-                            except ValueError:
-                                delay = 1.0
-                            await asyncio.sleep(delay)
-                            continue
-                        safe_request = httpx.Request(method, safe_url(response.url))
-                        try:
-                            response.raise_for_status()
-                        except httpx.HTTPStatusError:
-                            safe_response = httpx.Response(response.status_code, request=safe_request)
-                            raise httpx.HTTPStatusError(f"HTTP {response.status_code} for {safe_request.url}",
-                                                        request=safe_request, response=safe_response) from None
-                        chunks: list[bytes] = []
-                        size = 0
-                        async for chunk in response.aiter_bytes():
-                            size += len(chunk)
-                            if size > max_bytes:
-                                raise ValueError("Response is too large; narrow the query or reduce the limit")
-                            chunks.append(chunk)
-                        await response.aclose()
-                        headers = {k: v for k, v in response.headers.items()
-                                   if k not in {"content-encoding", "content-length"}}
-                        return httpx.Response(response.status_code, headers=headers,
-                                              content=b"".join(chunks), request=safe_request)
-            except httpx.RequestError as exc:
+    client = await _shared_client(timeout)
+    for attempt in range(2):
+        await _reserve_slot(host, interval)
+        try:
+            async with client.stream(method, url, params=params, json=json, data=data,
+                                     headers=headers, timeout=timeout) as response:
+                if (method == "GET" or retryable) and response.status_code in {429, 500, 502, 503, 504} and attempt == 0:
+                    try:
+                        delay = min(retry_after_cap, max(1.0, float(response.headers.get(retry_after_header, "1"))))
+                    except ValueError:
+                        delay = 1.0
+                    await asyncio.sleep(delay)
+                    continue
+                safe_request = httpx.Request(method, safe_url(response.url))
                 try:
-                    target = safe_url(exc.request.url)
-                except RuntimeError:
-                    target = safe_url(url)
-                raise type(exc)(f"Request failed for {target}", request=httpx.Request(method, target)) from None
-            finally:
-                _last_request[host] = time.monotonic()
-    raise RuntimeError("Request retry exhausted")
+                    response.raise_for_status()
+                except httpx.HTTPStatusError:
+                    safe_response = httpx.Response(response.status_code, request=safe_request)
+                    raise httpx.HTTPStatusError(
+                        f"upstream_error: HTTP {response.status_code} for {safe_request.url}",
+                        request=safe_request, response=safe_response) from None
+                chunks: list[bytes] = []
+                size = 0
+                async for chunk in response.aiter_bytes():
+                    size += len(chunk)
+                    if size > max_bytes:
+                        raise ValueError("Response is too large; narrow the query or reduce the limit")
+                    chunks.append(chunk)
+                await response.aclose()
+                response_headers = {k: v for k, v in response.headers.items()
+                                    if k not in {"content-encoding", "content-length"}}
+                return httpx.Response(response.status_code, headers=response_headers,
+                                      content=b"".join(chunks), request=safe_request)
+        except httpx.RequestError as exc:
+            try:
+                target = safe_url(exc.request.url)
+            except RuntimeError:
+                target = safe_url(url)
+            raise type(exc)(f"upstream_error: Request failed for {target}",
+                            request=httpx.Request(method, target)) from None
+    raise RuntimeError(f"upstream_error: Request retry exhausted for {safe_url(url)}")
 
 
 async def get_json(url: str, params: dict | None = None) -> Any:

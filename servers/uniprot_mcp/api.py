@@ -2,6 +2,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from typing import Annotated
+
+from pydantic import Field
 
 from common.http import bounded, get_json, identifier, identifiers, request, text
 
@@ -17,7 +21,8 @@ def _job(value: str) -> str:
     return identifier(value, r"[A-Za-z0-9_-]{1,100}", "mapping job ID")
 
 
-async def uniprot_search(query: str, limit: int = 20, cursor: str | None = None) -> dict:
+async def uniprot_search(query: str, limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                         cursor: str | None = None) -> dict:
     """Search UniProtKB, e.g. organism_id:4530 AND protein_name:heat; return next-page link."""
     params = {"query": text(query), "format": "json", "size": bounded(limit), "fields": FIELDS}
     if cursor is not None:
@@ -91,8 +96,10 @@ def _function_summary(record: dict) -> dict:
             "source_url": source_url, "record_url": f"{BASE}/uniprotkb/{accession}.json"}
 
 
-async def uniprot_function(gene: str, taxon_id: int | None = None, reviewed_only: bool = True,
-                           limit: int = 5) -> dict:
+async def uniprot_function(gene: str,
+                           taxon_id: Annotated[int | None, Field(ge=1, le=10_000_000)] = None,
+                           reviewed_only: bool = True,
+                           limit: Annotated[int, Field(ge=1, le=5)] = 5) -> dict:
     """Find a gene's curated function, cautions, GO terms, features and supporting publications.
 
     Example: gene="MYB52", taxon_id=3702 (Arabidopsis thaliana).
@@ -135,11 +142,13 @@ async def uniprot_function(gene: str, taxon_id: int | None = None, reviewed_only
     elif selection_required:
         warnings.append("Candidate entries are separate records; their functions must not be merged")
     return {"gene": gene, "taxon_id": taxon_id, "reviewed_only": reviewed_only,
-            "query": " AND ".join(clauses), "total": total, "returned": len(entries),
+            "query": " AND ".join(clauses), "total": total, "limit": limit, "offset": 0,
+            "returned": len(entries),
             "selection_required": selection_required,
             "selected_accession": entries[0]["accession"] if len(entries) == 1 and not selection_required and not errors else None,
             "entries": entries, "partial": bool(errors), "errors": errors, "warnings": warnings,
-            "truncated": truncated, "next_url": search.get("next_url"), "source_url": search["source_url"]}
+            "truncated": truncated, "pagination": "local", "next_url": search.get("next_url"),
+            "source_url": search["source_url"]}
 
 
 async def uniprot_sequence(accession: str) -> dict:
@@ -150,7 +159,8 @@ async def uniprot_sequence(accession: str) -> dict:
 
 
 async def uniprot_mapping_submit(ids: list[str], from_database: str = "GeneID",
-                                 to_database: str = "UniProtKB", taxon_id: int | None = None) -> dict:
+                                 to_database: str = "UniProtKB",
+                                 taxon_id: Annotated[int | None, Field(ge=1, le=10_000_000)] = None) -> dict:
     """Submit up to 1000 IDs. Database codes follow UniProt ID Mapping configuration."""
     values = identifiers(ids)
     if any("," in value or any(c.isspace() for c in value) for value in values):
@@ -171,7 +181,8 @@ async def uniprot_mapping_status(job_id: str) -> dict:
             "source_url": url}
 
 
-async def uniprot_mapping_results(job_id: str, limit: int = 100, cursor: str | None = None) -> dict:
+async def uniprot_mapping_results(job_id: str, limit: Annotated[int, Field(ge=1, le=500)] = 100,
+                                  cursor: str | None = None) -> dict:
     """Retrieve one bounded page of a completed ID-mapping job, preserving failed IDs."""
     params = {"format": "json", "size": bounded(limit, 500)}
     if cursor is not None:
@@ -199,4 +210,21 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def id_mapping_databases() -> str:
+    """Describe the ID-mapping endpoint and its constraints (no local enum constants)."""
+    return json.dumps({
+        "resource": "uniprot://databases",
+        "id_mapping": {"from_to": "UniProt ID Mapping database codes (e.g. GeneID, UniProtKB); "
+                                    "see https://rest.uniprot.org/configure/idmapping/fields",
+                       "max_ids_per_job": 1000, "job_id_pattern": "[A-Za-z0-9_-]{1,100}"},
+        "endpoints": {
+            "uniprot_search": {"size": "1-100", "cursor": "optional next-page token (<=2000 chars)"},
+            "uniprot_function": {"limit": "1-5", "taxon_id": "1-10000000"},
+            "uniprot_mapping_results": {"size": "1-500", "cursor": "optional next-page token"},
+        },
+    })
+
+
+RESOURCES = (
+    ("uniprot://databases", id_mapping_databases),
+)

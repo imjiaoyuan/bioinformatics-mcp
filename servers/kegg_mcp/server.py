@@ -1,3 +1,4 @@
+from common.serve import register, register_status
 from mcp.server.mcpserver import MCPServer
 
 from servers.kegg_mcp import api
@@ -5,11 +6,8 @@ from servers.kegg_mcp import api
 
 mcp = MCPServer("kegg")
 
-for tool in api.TOOLS:
-    mcp.add_tool(tool)
-
-for uri, resource in api.RESOURCES:
-    mcp.resource(uri)(resource)
+register(mcp, api, "kegg")
+register_status(mcp, "kegg")
 
 
 def main() -> None:

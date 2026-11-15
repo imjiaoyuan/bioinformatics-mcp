@@ -34,10 +34,11 @@ live sample confirms the response shape.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 import re
 
 import httpx
+from pydantic import Field
 
 from common.api import local_page, page
 from common.http import bounded, request, safe_url, text
@@ -266,8 +267,9 @@ async def alliance_alleles(gene_id: str, limit: int = 20, offset: int = 0) -> di
                          if isinstance(payload, dict) else None)}
 
 
-async def alliance_search(query: str, category: str | None = None, limit: int = 20,
-                          offset: int = 0) -> dict:
+async def alliance_search(query: str, category: str | None = None,
+                          limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                          offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Free-text search across Alliance entities (genes, variants, diseases, ...).
 
     The upstream /search endpoint ignores a category filter parameter and
@@ -330,4 +332,14 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _member_databases() -> dict:
+    """List the Alliance member databases and identifier prefixes accepted here."""
+    return {"member_databases": sorted({"HGNC", "MGI", "RGD", "ZFIN", "FB", "WB", "SGD"}),
+            "bare_id_prefixes": {"FBgn/FBpp/FBtr/FBal": "FB", "WBGene": "WB",
+                                 "ZDB-GENE-": "ZFIN", "S000000-style": "SGD"},
+            "gene_id_format": "prefix:local CURIE (e.g. FB:FBgn0000606, HGNC:11998); bare MOD ids are auto-prefixed"}
+
+
+RESOURCES = (
+    ("alliance://member_databases", _member_databases),
+)

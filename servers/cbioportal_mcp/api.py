@@ -1,10 +1,19 @@
 """Public cBioPortal studies, clinical data and selected molecular measurements."""
 from __future__ import annotations
 
+from typing import Annotated, Literal
+
+from pydantic import Field
+
 from common.api import choice, json_response
 from common.http import bounded, identifier, identifiers, request, text
 
 BASE = "https://www.cbioportal.org/api"
+
+Level = Literal["SAMPLE", "PATIENT"]
+Limit = Annotated[int, Field(ge=1, le=100)]
+PageIndex = Annotated[int, Field(ge=0, le=10_000)]
+EntrezGeneId = Annotated[int, Field(ge=1, le=2_147_483_647)]
 
 
 def _page(limit: int, page: int) -> dict:
@@ -36,7 +45,7 @@ def _selection(sample_ids: list[str], gene_ids: list[int]) -> dict:
     return {"sampleIds": samples, "entrezGeneIds": genes}
 
 
-async def cbioportal_studies(query: str | None = None, limit: int = 20, page: int = 0) -> dict:
+async def cbioportal_studies(query: str | None = None, limit: Limit = 20, page: PageIndex = 0) -> dict:
     """List public studies, optionally searching study name and cancer type."""
     params = _page(limit, page)
     if query is not None:
@@ -44,13 +53,13 @@ async def cbioportal_studies(query: str | None = None, limit: int = 20, page: in
     return await _list("studies", params)
 
 
-async def cbioportal_samples(study_id: str, limit: int = 20, page: int = 0) -> dict:
+async def cbioportal_samples(study_id: str, limit: Limit = 20, page: PageIndex = 0) -> dict:
     """List samples with patient identifiers and sample types."""
     return await _list(f"studies/{identifier(study_id)}/samples", _page(limit, page))
 
 
 async def cbioportal_clinical(study_id: str, attribute_id: str | None = None,
-                             level: str = "SAMPLE", limit: int = 20, page: int = 0) -> dict:
+                             level: Level = "SAMPLE", limit: Limit = 20, page: PageIndex = 0) -> dict:
     """Retrieve clinical values at SAMPLE or PATIENT level, retaining attribute identifiers."""
     params = {**_page(limit, page), "clinicalDataType": choice(level, {"SAMPLE", "PATIENT"}, "level")}
     if attribute_id is not None:
@@ -58,13 +67,13 @@ async def cbioportal_clinical(study_id: str, attribute_id: str | None = None,
     return await _list(f"studies/{identifier(study_id)}/clinical-data", params)
 
 
-async def cbioportal_molecular_profiles(study_id: str, limit: int = 20, page: int = 0) -> dict:
+async def cbioportal_molecular_profiles(study_id: str, limit: Limit = 20, page: PageIndex = 0) -> dict:
     """Discover molecular profiles; inspect datatype, alteration type and description before use."""
     return await _list(f"studies/{identifier(study_id)}/molecular-profiles", _page(limit, page))
 
 
-async def cbioportal_mutations(profile_id: str, sample_ids: list[str], gene_ids: list[int],
-                               limit: int = 20, page: int = 0) -> dict:
+async def cbioportal_mutations(profile_id: str, sample_ids: list[str], gene_ids: list[EntrezGeneId],
+                               limit: Limit = 20, page: PageIndex = 0) -> dict:
     """Fetch mutations for explicit samples and Entrez genes with upstream pagination."""
     profile_id = identifier(profile_id)
     body = _selection(sample_ids, gene_ids)
@@ -76,7 +85,7 @@ async def cbioportal_mutations(profile_id: str, sample_ids: list[str], gene_ids:
     return {**result, "profile": profile, "profile_source_url": source["source_url"]}
 
 
-async def cbioportal_molecular_data(profile_id: str, sample_ids: list[str], gene_ids: list[int]) -> dict:
+async def cbioportal_molecular_data(profile_id: str, sample_ids: list[str], gene_ids: list[EntrezGeneId]) -> dict:
     """Read numeric measurements for at most 1000 sample-gene pairs.
 
     Values retain the selected profile's scale; no conversion to counts/TPM is implied.
@@ -103,4 +112,17 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def cbioportal_constraints() -> dict:
+    """List the cBioPortal clinical levels, molecular alteration types and selection limits."""
+    return {"clinical_levels": ["SAMPLE", "PATIENT"],
+            "numeric_profile_types": ["MRNA_EXPRESSION", "COPY_NUMBER_ALTERATION",
+                                      "PROTEIN_LEVEL", "METHYLATION"],
+            "selection": {"sample_ids": "at most 100 unique sample IDs",
+                          "gene_ids": "1-100 Entrez gene IDs",
+                          "pairs": "at most 1000 sample-gene pairs"},
+            "paging": {"pageSize": "1-100", "pageNumber": "0-10000"}}
+
+
+RESOURCES = (
+    ("cbioportal://constraints", cbioportal_constraints),
+)

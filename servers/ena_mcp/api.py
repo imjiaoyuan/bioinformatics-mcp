@@ -1,7 +1,11 @@
 """ENA study, sample and run search with FASTQ download metadata."""
 from __future__ import annotations
 
+from typing import Annotated, Literal
+
 from urllib.parse import urlencode
+
+from pydantic import Field
 
 from common.http import bounded, get_json, identifier, request, text
 from common.ena import RUN_FIELDS, files_from_record
@@ -20,7 +24,12 @@ def _accession(accession: str) -> str:
     return identifier(accession.upper(), r"(?:[SED]R[APRSX][0-9]+|PRJ(?:NA|EB|DB|DA|EA)[0-9]+|SAM[END][A-Z]?[0-9]+)", "ENA accession")
 
 
-async def ena_search(query: str, result: str = "read_run", limit: int = 20, offset: int = 0) -> dict:
+Result = Literal["read_run", "read_study", "read_experiment", "sample", "study", "assembly"]
+
+
+async def ena_search(query: str, result: Result = "read_run",
+                     limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                     offset: Annotated[int, Field(ge=0, le=100000)] = 0) -> dict:
     """Search ENA with Portal query syntax, e.g. tax_tree(4530) AND library_strategy=\"RNA-Seq\"."""
     params = {"query": text(query), "result": _result(result), "format": "json",
               "limit": bounded(limit), "offset": bounded(offset, 100000, "offset", 0)}
@@ -38,7 +47,7 @@ async def ena_record(accession: str) -> dict:
     return {"accession": accession, "xml": response.text, "source_url": url}
 
 
-async def ena_fastq(accession: str, limit: int = 20) -> dict:
+async def ena_fastq(accession: str, limit: Annotated[int, Field(ge=1, le=100)] = 20) -> dict:
     """List public run FASTQ URLs, MD5 checksums and byte sizes; do not download reads."""
     accession = _accession(accession)
     params = {"accession": accession, "result": "read_run", "fields": RUN_FIELDS,
@@ -55,7 +64,7 @@ async def ena_fastq(accession: str, limit: int = 20) -> dict:
             "source_url": f"{BASE}/filereport?{urlencode(params)}"}
 
 
-async def ena_fields(result: str = "read_run") -> dict:
+async def ena_fields(result: Result = "read_run") -> dict:
     """List supported ENA search fields for a record type."""
     params = {"result": _result(result), "format": "json"}
     return {"fields": await get_json(f"{BASE}/searchFields", params),
@@ -70,4 +79,12 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _result_types() -> dict:
+    """List the ENA Portal record types accepted by the result parameter."""
+    return {"result_types": sorted(RESULTS),
+            "notes": "ena_search/ena_fields accept result=...; read_run also powers ena_fastq."}
+
+
+RESOURCES = (
+    ("ena://results", _result_types),
+)

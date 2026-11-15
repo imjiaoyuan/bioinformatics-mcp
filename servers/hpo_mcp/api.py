@@ -2,12 +2,18 @@
 from __future__ import annotations
 
 import re
+from typing import Annotated
+
+from pydantic import Field
 
 from common.api import json_response, local_page
 from common.http import bounded, identifier, identifiers, text
 
 BASE = "https://ontology.jax.org/api/hp"
 _SEARCH_PATTERN = re.compile(r"[a-zA-Z0-9\s\-':,]+")
+
+Limit = Annotated[int, Field(ge=1, le=100)]
+PageIndex = Annotated[int, Field(ge=0, le=10_000)]
 
 
 def _term_id(value: str) -> str:
@@ -25,7 +31,7 @@ async def _get(path: str, params: dict | None = None) -> tuple[dict | list, dict
     return await json_response(f"{BASE}{path}", params)
 
 
-async def hpo_search(query: str, limit: int = 20, page: int = 0) -> dict:
+async def hpo_search(query: str, limit: Limit = 20, page: PageIndex = 0) -> dict:
     """Search HPO terms by name, ID fragment or synonym; returns upstream pagination metadata."""
     data, source = await _get("/search", {
         "q": _search_query(query),
@@ -85,4 +91,18 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def hpo_constraints() -> dict:
+    """Describe the HPO ontology-service endpoints and identifier/search conventions."""
+    return {"base": BASE,
+            "term_id": "HP:0000000-style identifier (HP: + 7 digits)",
+            "search_query": "3-250 characters of letters, digits, spaces, - ' : ,",
+            "endpoints": ["/search", "/terms/{term_id}", "/terms",
+                          "/terms/{term_id}/children", "/terms/{term_id}/parents",
+                          "/terms/{term_id}/ancestors", "/terms/{term_id}/descendants"],
+            "paging": {"search": "limit 1-100, page 0-10000 (upstream pagination)",
+                       "hierarchy": "full result set returned, sliced locally"}}
+
+
+RESOURCES = (
+    ("hpo://constraints", hpo_constraints),
+)

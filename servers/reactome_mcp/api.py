@@ -1,6 +1,11 @@
 """Reactome pathway content, reactions and participating molecules."""
 from __future__ import annotations
 
+import json
+from typing import Annotated, Literal
+
+from pydantic import Field
+
 from common.api import choice, json_response, local_page
 from common.http import bounded, identifier, text
 
@@ -18,8 +23,9 @@ async def _list(path: str, limit: int, offset: int, params: dict | None = None) 
     return local_page(data, limit, offset, **source)
 
 
-async def reactome_search(query: str, species: str = "Homo sapiens", limit: int = 20,
-                          page: int = 1) -> dict:
+async def reactome_search(query: str, species: str = "Homo sapiens",
+                          limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                          page: Annotated[int, Field(ge=1, le=10000)] = 1) -> dict:
     """Search pathways and reactions with upstream pagination (pages start at 1)."""
     params = {"query": text(query), "species": text(species, "species", 100),
               "types": ["Pathway", "Reaction"], "cluster": "false",
@@ -34,19 +40,24 @@ async def reactome_entry(reactome_id: str) -> dict:
     return {**source, "data": data}
 
 
-async def reactome_pathway_events(reactome_id: str, limit: int = 20, offset: int = 0) -> dict:
+async def reactome_pathway_events(reactome_id: str,
+                                  limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                                  offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """List recursively contained events; paging is local over a byte-bounded upstream list."""
     return await _list(f"data/pathway/{_id(reactome_id)}/containedEvents", limit, offset)
 
 
-async def reactome_participants(reactome_id: str, limit: int = 20, offset: int = 0) -> dict:
+async def reactome_participants(reactome_id: str,
+                                limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                                offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """List reference entities participating in an event, with local result pagination."""
     return await _list(f"data/participants/{_id(reactome_id)}/referenceEntities", limit, offset)
 
 
-async def reactome_pathways_for_gene(gene_id: str, resource: str = "UniProt",
-                                     species: str = "Homo sapiens", limit: int = 20,
-                                     offset: int = 0) -> dict:
+async def reactome_pathways_for_gene(gene_id: str, resource: Literal["UniProt", "Ensembl"] = "UniProt",
+                                     species: str = "Homo sapiens",
+                                     limit: Annotated[int, Field(ge=1, le=100)] = 20,
+                                     offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """Map a UniProt/Ensembl identifier to lower-level pathways; no ID conversion is implied."""
     choice(resource, {"UniProt", "Ensembl"}, "resource")
     return await _list(f"data/mapping/{resource}/{identifier(gene_id)}/pathways", limit, offset,
@@ -62,4 +73,13 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def mapping_resources() -> str:
+    """List the identifier resources supported by pathway mapping."""
+    return json.dumps({"mapping_resources": ["UniProt", "Ensembl"],
+                       "reactome_id_pattern": "R-[A-Z]{3}-[0-9]+(.[0-9]+)? or numeric DB ID",
+                       "search": {"pages_start_at": 1, "max_page": 10000, "limit": "1-100"}})
+
+
+RESOURCES = (
+    ("reactome://mapping-resources", mapping_resources),
+)

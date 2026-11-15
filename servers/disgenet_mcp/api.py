@@ -8,18 +8,23 @@ commercial use; academic users must respect the DISGENET license terms.
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import os
+from typing import Annotated, Literal
 
-import httpx
+from pydantic import Field
 
 from common.api import choice, page
-from common.http import bounded, identifier, text
+from common.http import bounded, identifier, request, safe_url, text
+
+BASE = "https://www.disgenet.org/api"
 
 BASE = "https://api.disgenet.com/api/v1"
 MAX_BYTES = 8_000_000
 SOURCES = {"all", "curated", "befree", "animal_models"}
+
+Source = Literal["all", "curated", "befree", "animal_models"]
+Limit = Annotated[int, Field(ge=1, le=100)]
+Offset = Annotated[int, Field(ge=0, le=1_000_000)]
 
 
 def _key() -> str:
@@ -37,33 +42,11 @@ def _cui(value: str) -> str:
 
 async def _get(path: str, params: dict) -> dict:
     """Issue a bounded GET with the API-key Authorization header; retry one 429 once."""
-    for attempt in range(2):
-        await asyncio.sleep(0.35 if attempt == 0 else 0)
-        async with httpx.AsyncClient(timeout=45, follow_redirects=True,
-                                     headers={"Authorization": _key(),
-                                              "accept": "application/json",
-                                              "User-Agent": "bioinformatics-mcp/0.1"}) as client:
-            async with client.stream("GET", f"{BASE}/{path}", params=params) as response:
-                if response.status_code == 429 and attempt == 0:
-                    try:
-                        delay = min(30.0, max(1.0, float(
-                            response.headers.get("x-rate-limit-retry-after-seconds", "1"))))
-                    except ValueError:
-                        delay = 1.0
-                    await asyncio.sleep(delay)
-                    continue
-                response.raise_for_status()
-                chunks: list[bytes] = []
-                size = 0
-                async for chunk in response.aiter_bytes():
-                    size += len(chunk)
-                    if size > MAX_BYTES:
-                        raise ValueError("Response is too large; narrow the query or reduce the limit")
-                    chunks.append(chunk)
-                await response.aclose()
-                return {"source_url": str(response.request.url),
-                        **json.loads(b"".join(chunks))}
-    raise RuntimeError("Request retry exhausted")
+    response = await request("GET", f"{BASE}/{path}", params=params,
+                             headers={"Authorization": _key(), "accept": "application/json"},
+                             retryable=True, retry_after_header="x-rate-limit-retry-after-seconds",
+                             retry_after_cap=30.0)
+    return {"source_url": safe_url(response.url), **response.json()}
 
 
 def _paging(limit: int, offset: int) -> dict:
@@ -72,14 +55,14 @@ def _paging(limit: int, offset: int) -> dict:
     return {**paging, "page_number": str(paging["offset"] // paging["limit"])}
 
 
-async def disgenet_gda_summary(sourc: str = "all") -> dict:
+async def disgenet_gda_summary(sourc: Source = "all") -> dict:
     """Summarize gene-disease association counts by source, gene and disease."""
     return await _get("gda/summary", {"sourc": choice(sourc, SOURCES, "sourc").upper()})
 
 
 async def disgenet_gene_diseases(ncbi_gene_id: str | None = None, gene_symbol: str | None = None,
-                                 disease_cui: str | None = None, limit: int = 20,
-                                 offset: int = 0) -> dict:
+                                 disease_cui: str | None = None, limit: Limit = 20,
+                                 offset: Offset = 0) -> dict:
     """Retrieve gene-disease associations for one gene or disease, with GDA scores.
 
     Provide ``ncbi_gene_id`` (Entrez Gene ID), ``gene_symbol`` or ``disease_cui``
@@ -98,19 +81,19 @@ async def disgenet_gene_diseases(ncbi_gene_id: str | None = None, gene_symbol: s
     return await _get("gda/gene", params)
 
 
-async def disgenet_disease_genes(disease_cui: str, limit: int = 20, offset: int = 0) -> dict:
+async def disgenet_disease_genes(disease_cui: str, limit: Limit = 20, offset: Offset = 0) -> dict:
     """Retrieve the genes associated with one disease by UMLS CUI, with GDA scores."""
     return await _get("gda/disease", {**_paging(limit, offset), "diseaseid": _cui(disease_cui)})
 
 
-async def disgenet_vda_summary(sourc: str = "all") -> dict:
+async def disgenet_vda_summary(sourc: Source = "all") -> dict:
     """Summarize variant-disease association counts by source, variant and disease."""
     return await _get("vda/summary", {"sourc": choice(sourc, SOURCES, "sourc").upper()})
 
 
 async def disgenet_variant_diseases(snp_id: str | None = None, vdb_id: str | None = None,
-                                    disease_cui: str | None = None, limit: int = 20,
-                                    offset: int = 0) -> dict:
+                                    disease_cui: str | None = None, limit: Limit = 20,
+                                    offset: Offset = 0) -> dict:
     """Retrieve variant-disease associations by dbSNP rsID, DISGENET variant ID or disease.
 
     Provide ``snp_id`` (rs number), ``vdb_id`` (DISGENET variant identifier) or
@@ -129,7 +112,7 @@ async def disgenet_variant_diseases(snp_id: str | None = None, vdb_id: str | Non
     return await _get("vda/variant", params)
 
 
-async def disgenet_disease_variants(disease_cui: str, limit: int = 20, offset: int = 0) -> dict:
+async def disgenet_disease_variants(disease_cui: str, limit: Limit = 20, offset: Offset = 0) -> dict:
     """Retrieve the variants associated with one disease by UMLS CUI, with VDA scores."""
     return await _get("vda/disease", {**_paging(limit, offset), "diseaseid": _cui(disease_cui)})
 
@@ -144,4 +127,15 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def disgenet_sources() -> dict:
+    """List the association source filters accepted by disgenet_* tools."""
+    return {"sources": sorted(SOURCES),
+            "identifiers": {"gene": "Entrez Gene ID, symbol or UMLS CUI (C....)",
+                            "variant": "dbSNP rsID, DISGENET vdb_id or UMLS CUI"},
+            "env": ["DISGENET_API_KEY (required)"],
+            "paging": {"limit": "1-100", "offset": "0-1000000 (mapped upstream to page_number)"}}
+
+
+RESOURCES = (
+    ("disgenet://sources", disgenet_sources),
+)

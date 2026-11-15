@@ -49,20 +49,22 @@ def ensure_uvx() -> None:
         raise ValueError("--uvx requires uvx on PATH; install uv first")
 
 
-def build_entries(selected: list[str], *, serve: bool, uvx: bool) -> dict[str, dict]:
+def build_entries(selected: list[str], *, serve: bool, uvx: bool, ref: str | None = None,
+                  name: str = "bioinformatics") -> dict[str, dict]:
+    source = SOURCE if ref is None else f"{SOURCE}@{ref}"
     if serve:
         if uvx:
-            command, arguments = "uvx", ["--from", SOURCE, "bioinformatics-mcp", "serve", *selected]
+            command, arguments = "uvx", ["--from", source, "bioinformatics-mcp", "serve", *selected]
         else:
             command, arguments = find_command("bioinformatics-mcp"), ["serve", *selected]
-        return {"bioinformatics": {"command": command, **({"args": arguments} if arguments else {})}}
+        return {name: {"command": command, **({"args": arguments} if arguments else {})}}
     if uvx:
         ensure_uvx()
-        return {name: {"command": "uvx", "args": ["--from", SOURCE, f"{name}-mcp"]} for name in selected}
-    return {name: {"command": find_command(f"{name}-mcp")} for name in selected}
+        return {entry_name: {"command": "uvx", "args": ["--from", source, f"{entry_name}-mcp"]} for entry_name in selected}
+    return {entry_name: {"command": find_command(f"{entry_name}-mcp")} for entry_name in selected}
 
 
-def merge_config(path: Path, entries: dict, *, replace: bool) -> None:
+def merge_config(path: Path, entries: dict, *, replace: bool, remove: bool = False) -> None:
     if path.is_symlink():
         raise ValueError("Config path must not be a symlink")
     original = path.read_text(encoding="utf-8") if path.exists() else None
@@ -70,11 +72,18 @@ def merge_config(path: Path, entries: dict, *, replace: bool) -> None:
     if not isinstance(config, dict) or not isinstance(config.get("mcpServers", {}), dict):
         raise ValueError("Expected a JSON object with an mcpServers object")
     servers = config.setdefault("mcpServers", {})
-    conflicts = [name for name, entry in entries.items()
-                 if name in servers and servers[name] != entry]
-    if conflicts and not replace:
-        raise ValueError(f"Existing entries differ: {', '.join(conflicts)}; use --replace to update them")
-    servers.update(entries)
+    if remove:
+        unknown = [key for key in entries if key not in servers]
+        if unknown:
+            raise ValueError(f"Not registered: {', '.join(unknown)}")
+        for key in entries:
+            del servers[key]
+    else:
+        conflicts = [entry_name for entry_name, entry in entries.items()
+                     if entry_name in servers and servers[entry_name] != entry]
+        if conflicts and not replace:
+            raise ValueError(f"Existing entries differ: {', '.join(conflicts)}; use --replace to update them")
+        servers.update(entries)
     content = json.dumps(config, indent=2, ensure_ascii=False) + "\n"
     if content == original:
         return
@@ -119,18 +128,27 @@ def main(argv: list[str] | None = None) -> None:
     subparsers.add_parser("list", help="List available providers grouped by category with selection numbers")
     for action in ("config", "register"):
         sub = subparsers.add_parser(action, help="Print configuration" if action == "config"
-                                    else "Merge entries into an mcpServers JSON file")
-        sub.add_argument("servers", nargs="+", metavar="SERVER",
+                                    else "Merge or remove entries in an mcpServers JSON file")
+        sub.add_argument("servers", nargs="+" if action == "config" else "*", metavar="SERVER",
                          help="Provider names or numbers, e.g. ensembl, 1.3, 2")
         sub.add_argument("--serve", action="store_true",
                          help="Emit one aggregated entry serving all selected providers")
         sub.add_argument("--uvx", action="store_true",
                          help="Emit uvx entries that install on demand, without fixed paths")
+        sub.add_argument("--ref", help="Pin the git source to a tag, e.g. v0.2.0 (with --uvx)")
         if action == "config":
             sub.add_argument("--format", choices=("json", "toml"), default="json")
+            sub.add_argument("--name", default="bioinformatics",
+                             help="Entry key for the aggregated --serve entry (default: bioinformatics)")
         else:
             sub.add_argument("--config", type=Path, required=True, help="Target mcpServers JSON file")
             sub.add_argument("--replace", action="store_true", help="Replace conflicting selected entries")
+            sub.add_argument("--remove", action="store_true",
+                             help="Remove the selected entries instead of adding them")
+    doctor = subparsers.add_parser("doctor", help="Check providers, required environment, and release status")
+    doctor.add_argument("servers", nargs="*", metavar="SERVER", help="Providers to check (default: all)")
+    doctor.add_argument("--offline", action="store_true", help="Skip the release check")
+    subparsers.add_parser("update", help="Upgrade the installed package")
     serve = subparsers.add_parser("serve", help="Serve selected providers aggregated in one MCP process")
     serve.add_argument("servers", nargs="+", metavar="SERVER",
                        help="Provider names or numbers, e.g. ensembl, 1.3, 2")
@@ -144,11 +162,23 @@ def main(argv: list[str] | None = None) -> None:
     if args.action == "list":
         print(format_list(commands))
         return
+    if args.action == "update":
+        from common.doctor import upgrade
+        upgrade()
+        return
+    if args.action == "doctor":
+        from common.doctor import main as doctor_main
+        doctor_main(["check", *args.servers, *(["--offline"] if args.offline else [])])
+        return
     if args.action == "call":
         provider, = resolve_selections([args.provider], commands)
         from common.call import main as call_main
         call_main(find_command(f"{provider}-mcp"), args.tool, args.arguments, args.timeout)
         return
+    if args.action == "register" and not args.servers:
+        parser.error("register requires at least one SERVER unless --remove targets specific servers")
+    if getattr(args, "ref", None) and not args.uvx:
+        parser.error("--ref applies to --uvx entries that install from the git source")
     try:
         args.servers = resolve_selections(args.servers, commands)
     except ValueError as error:
@@ -158,14 +188,19 @@ def main(argv: list[str] | None = None) -> None:
         serve_main(args.servers)
         return
     try:
-        entries = build_entries(args.servers, serve=args.serve, uvx=args.uvx)
         if args.action == "register":
-            merge_config(args.config.expanduser(), entries, replace=args.replace)
-            print(f"Registered {', '.join(entries)} in {args.config}")
-        elif args.format == "json":
-            print(json.dumps({"mcpServers": entries}, indent=2))
+            if not args.servers:
+                parser.error("register --remove requires at least one SERVER")
+            entries = build_entries(args.servers, serve=args.serve, uvx=args.uvx, ref=args.ref)
+            merge_config(args.config.expanduser(), entries, replace=args.replace, remove=args.remove)
+            verb = "Removed" if args.remove else "Registered"
+            print(f"{verb} {', '.join(entries)} {'from' if args.remove else 'in'} {args.config}")
         else:
-            print_toml(entries, args.servers)
+            entries = build_entries(args.servers, serve=args.serve, uvx=args.uvx, ref=args.ref, name=args.name)
+            if args.format == "json":
+                print(json.dumps({"mcpServers": entries}, indent=2))
+            else:
+                print_toml(entries, args.servers)
     except (OSError, ValueError) as error:
         parser.error(str(error))
 

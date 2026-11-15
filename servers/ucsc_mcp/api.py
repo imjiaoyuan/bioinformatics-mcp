@@ -1,6 +1,10 @@
 """UCSC Genome Browser genomes, track metadata and chromosomal range data."""
 from __future__ import annotations
 
+from typing import Annotated
+
+from pydantic import Field
+
 from common.api import json_response
 from common.http import bounded, identifier, text
 
@@ -29,7 +33,9 @@ async def ucsc_list_chromosomes(genome: str) -> dict:
     return await _get("list/chromosomes", {"genome": identifier(genome, r"[A-Za-z0-9_.+-]+", "genome")})
 
 
-async def ucsc_get_data(genome: str, track: str, chrom: str, start: int, end: int) -> dict:
+async def ucsc_get_data(genome: str, track: str, chrom: str,
+                        start: Annotated[int, Field(ge=0, le=2_500_000_000)],
+                        end: Annotated[int, Field(ge=0, le=2_500_000_000)]) -> dict:
     """Retrieve track records intersecting one chromosomal range (0-based half-open).
 
     Keep ranges narrow: UCSC caps the returned interval span, and very large
@@ -66,4 +72,17 @@ TOOLS = (
 )
 
 
-RESOURCES = ()
+def _endpoints() -> dict:
+    """Describe the UCSC Genome Browser API endpoints used by this server."""
+    return {"upstream": "https://api.genome.ucsc.edu",
+            "endpoints": {"ucsc_list_genomes": "list/ucscGenomes",
+                          "ucsc_list_tracks": "list/tracks?genome=...",
+                          "ucsc_list_chromosomes": "list/chromosomes?genome=...",
+                          "ucsc_get_data": "getData/track?genome&track&chrom&start&end (0-based half-open, span capped upstream)",
+                          "ucsc_search_genomes": "local substring filter over list/ucscGenomes"},
+            "constraints": {"start/end": "0-2500000000, end must be greater than start"}}
+
+
+RESOURCES = (
+    ("ucsc://endpoints", _endpoints),
+)
