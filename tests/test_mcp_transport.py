@@ -28,7 +28,7 @@ SERVERS = {
     "chembl": (6, "chembl_search", {}),
     "cncb": (8, "cncb_genome", {}),
     "ena": (4, "ena_search", {}),
-    "ensembl": (8, "ensembl_lookup", {}),
+    "ensembl": (10, "ensembl_lookup", {}),
     "gdc": (6, "gdc_projects", {"limit": 0}),
     "gprofiler": (3, "gprofiler_enrichment", {}),
     "gwas": (5, "gwas_traits", {}),
@@ -72,7 +72,9 @@ SERVERS = {
     "phytozome": (5, "phytozome_organisms", {"limit": 0}),
     "hgnc": (4, "hgnc_entry", {}),
     "pubchem": (7, "pubchem_resolve", {}),
-    "alliance": (4, "alliance_gene", {}),
+    "alliance": (6, "alliance_gene", {}),
+    "clinicaltrials": (2, "trial_study", {"nct_id": "bad"}),
+    "mesh": (3, "mesh_lookup", {"limit": 0}),
 }
 
 

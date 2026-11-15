@@ -68,6 +68,8 @@ phytozome-mcp = "servers.phytozome_mcp.server:main"
 hgnc-mcp = "servers.hgnc_mcp.server:main"
 pubchem-mcp = "servers.pubchem_mcp.server:main"
 alliance-mcp = "servers.alliance_mcp.server:main"
+clinicaltrials-mcp = "servers.clinicaltrials_mcp.server:main"
+mesh-mcp = "servers.mesh_mcp.server:main"
 
 [build-system]
 requires = ["hatchling>=1.32,<2"]
