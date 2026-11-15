@@ -269,6 +269,113 @@ class AllianceTests(HTTPTestCase):
             with self.subTest(args=args), self.assertRaises(ValueError):
                 await api.alliance_search(**args)
 
+    async def test_alleles_success_with_provisional_shape(self):
+        payload = {"results": [
+            {"id": "WB:WBVar00059878", "curie": "WB:WBVar00059878",
+             "category": "allele_search_result", "symbol": "lin-4(sd127)",
+             "name": "lin-4", "species": "Caenorhabditis elegans"},
+            {"id": "WB:WBVar00274874", "curie": "WB:WBVar00274874",
+             "category": "allele_search_result", "symbol": None, "name": None,
+             "species": None}],
+            "total": 2, "returnedRecords": 2}
+
+        def handler(req):
+            self.assertIn("/alleles", req.url.path)
+            return httpx.Response(200, json=payload)
+
+        with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
+            result = await api.alliance_alleles("WB:WBGene00003055", limit=1, offset=0)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["upstream_total"], 2)
+        self.assertEqual(result["total"], 2)
+        self.assertEqual(len(result["results"]), 1)
+        self.assertTrue(result["truncated"])
+        self.assertEqual(result["results"][0]["id"], "WB:WBVar00059878")
+        self.assertEqual(result["results"][0]["category"], "allele_search_result")
+        self.assertIn("/alleles", result["source_url"])
+
+    async def test_alleles_falls_back_to_allele_search_on_404(self):
+        allele_payload = {"results": [
+            {"id": "FBal0000127", "curie": "FB:FBal0000127",
+             "category": "allele_search_result", "symbol": "sd",
+             "name": "scabrous", "species": "Drosophila melanogaster"}],
+            "total": 1, "returnedRecords": 1}
+        paths = []
+
+        def handler(req):
+            paths.append(req.url.path)
+            if "/alleles" in req.url.path:
+                return httpx.Response(404, json={"error": "Resource not found"})
+            self.assertEqual(req.url.path, "/api/allele/search")
+            return httpx.Response(200, json=allele_payload)
+
+        with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
+            result = await api.alliance_alleles("FB:FBgn0000606")
+        self.assertEqual(paths, ["/api/gene/FB:FBgn0000606/alleles", "/api/allele/search"])
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["results"][0]["curie"], "FB:FBal0000127")
+        self.assertIn("/allele/search", result["source_url"])
+
+    async def test_alleles_validates_before_network_request(self):
+        with patch.object(api, "_get") as get:
+            for args in [{"gene_id": "HGNC:11998", "limit": 0},
+                         {"gene_id": "HGNC:11998", "limit": 101},
+                         {"gene_id": "HGNC:11998", "offset": -1},
+                         {"gene_id": "HGNC:11998", "offset": 1_000_001},
+                         {"gene_id": "TP53"}]:
+                with self.subTest(args=args), self.assertRaises(ValueError):
+                    await api.alliance_alleles(**args)
+            get.assert_not_called()
+
+    async def test_disease_search_filters_category_locally(self):
+        payload = {
+            "aggregations": [{"key": "category", "values": [
+                {"key": "gene_search_result", "total": 1168},
+                {"key": "allele_search_result", "total": 750},
+                {"key": "disease_search_result", "total": 139}]}],
+            "results": [
+                {"id": "FB:FBgn0039044", "curie": "FB:FBgn0039044",
+                 "category": "gene_search_result", "symbol": "p53",
+                 "name": "p53", "species": "Drosophila melanogaster",
+                 "soTermName": "protein_coding_gene", "score": 1100475.5},
+                {"id": "MGI:104672", "curie": "MGI:104672",
+                 "category": "disease_search_result", "symbol": None,
+                 "name": "p53 deficiency", "species": None,
+                 "soTermName": None, "score": 12.5},
+                {"id": "WB:WBVar00059878", "curie": "WB:WBVar00059878",
+                 "category": "allele_search_result", "symbol": "lin-4",
+                 "name": "lin-4", "species": "Caenorhabditis elegans",
+                 "soTermName": None, "score": 5.0}],
+            "total": 2057,
+        }
+        requests = []
+
+        def handler(req):
+            requests.append(req)
+            return httpx.Response(200, json=payload)
+
+        with self.mock_http(handler), patch("common.http.asyncio.sleep", new_callable=AsyncMock):
+            result = await api.alliance_disease_search("p53", limit=2)
+            self.assertEqual(requests[0].url.params["q"], "p53")
+            self.assertNotIn("category", requests[0].url.params)
+            self.assertEqual(requests[0].url.params["limit"], "2")
+            self.assertEqual(requests[0].url.params["offset"], "0")
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["category"], "disease_search_result")
+        self.assertEqual(result["category_totals"]["disease_search_result"], 139)
+        self.assertEqual(result["pagination"], "local")
+        self.assertEqual([row["name"] for row in result["results"]], ["p53 deficiency"])
+
+    async def test_disease_search_validates_before_network_request(self):
+        with patch.object(api, "_get") as get:
+            for args in [{"query": ""}, {"query": "p53", "limit": 0},
+                         {"query": "p53", "limit": 101},
+                         {"query": "p53", "offset": -1},
+                         {"query": "p53", "offset": 1_000_001}]:
+                with self.subTest(args=args), self.assertRaises(ValueError):
+                    await api.alliance_disease_search(**args)
+            get.assert_not_called()
+
     async def test_upstream_5xx_propagates(self):
         with self.mock_http(lambda req: httpx.Response(500)), \
                 patch("common.http.asyncio.sleep", new_callable=AsyncMock):
@@ -278,5 +385,6 @@ class AllianceTests(HTTPTestCase):
     async def test_tools_exported(self):
         self.assertEqual([tool.__name__ for tool in api.TOOLS],
                          ["alliance_gene", "alliance_gene_phenotypes",
-                          "alliance_orthologs", "alliance_search"])
+                          "alliance_orthologs", "alliance_search",
+                          "alliance_disease_search", "alliance_alleles"])
         self.assertEqual(api.RESOURCES, ())

@@ -17,12 +17,20 @@ from /gene/FB:FBgn0000606, /gene/WB:WBGene00003055, /gene/{id}/phenotypes,
 * Gene summaries nest under top-level "gene" with curated keys (geneSymbol,
   geneFullName, geneType, taxon, dataProvider, crossReferences, geneSynonyms);
   sub-resources return {"results": [...], "total": N, "returnedRecords": N}.
-* /search ignores a category query parameter and instead returns category
-  aggregations (e.g. gene_search_result) alongside the result page, so the
-  category filter here is applied locally to the returned page.
+* Bare identifiers normalize with or without a "primary" marker: ZDB-GENE-
+  990415-72 resolves as ZFIN:ZDB-GENE-990415-72 and S000006158 resolves as
+  SGD:S000006158 (the bare SGD form has no distinguishing prefix beyond the
+  leading S and six trailing digits).
 
 Known upstream gap (verified live): GET /gene/{id}/diseases returns
-"Resource not found" for every identifier, so no diseases tool is exposed.
+"Resource not found" for every identifier, so disease hits are reached
+through /search (see alliance_disease_search).
+
+The /gene/{id}/alleles sub-resource has NOT been verified live (egress to
+the Alliance API is WAF-challenged from this environment); alliance_alleles
+tries it first and falls back to /allele/search when it returns 404. The
+allele row mapping is therefore provisional and may need adjustment once a
+live sample confirms the response shape.
 """
 from __future__ import annotations
 
@@ -169,6 +177,19 @@ def _search_row(record: dict) -> dict:
             "so_term_name": record.get("soTermName"), "score": record.get("score")}
 
 
+def _allele_row(record: dict) -> dict:
+    """Map an allele record; provisional until a live sample confirms the shape."""
+    symbol = record.get("symbol")
+    if isinstance(symbol, dict):
+        symbol = _display(symbol)
+    name = record.get("name")
+    if isinstance(name, dict):
+        name = _display(name)
+    return {"id": record.get("id"), "curie": record.get("curie"),
+            "category": record.get("category"), "symbol": symbol, "name": name,
+            "species": record.get("species")}
+
+
 async def alliance_gene(gene_id: str) -> dict:
     """Retrieve an Alliance gene summary by MOD or AGRKB identifier.
 
@@ -222,6 +243,29 @@ async def alliance_orthologs(gene_id: str, limit: int = 20, offset: int = 0) -> 
                           if isinstance(row, dict)], limit, offset)}
 
 
+async def alliance_alleles(gene_id: str, limit: int = 20, offset: int = 0) -> dict:
+    """List alleles for one gene, paginated locally.
+
+    Tries the gene sub-resource GET /gene/{id}/alleles first; if that returns
+    404 upstream, falls back to /allele/search filtered by the gene's primary
+    external ID. NOTE: neither endpoint shape has been verified live from
+    this environment (Alliance egress is WAF-challenged here), so the allele
+    row mapping below is provisional and the fallback query parameter may
+    need adjustment once a live sample is captured. Limit/offset and the
+    gene identifier are validated before any network request.
+    """
+    value = _gene_id(gene_id)
+    page(limit, offset)  # validate before the network request
+    payload, source = await _get(f"gene/{value}/alleles")
+    if payload is None:
+        payload, source = await _get("allele/search", {"primaryId": value})
+    return {**source, "gene_id": value, "status": _status(payload),
+            **local_page([_allele_row(row) for row in _results(payload)
+                          if isinstance(row, dict)], limit, offset,
+                         upstream_total=payload.get("total")
+                         if isinstance(payload, dict) else None)}
+
+
 async def alliance_search(query: str, category: str | None = None, limit: int = 20,
                           offset: int = 0) -> dict:
     """Free-text search across Alliance entities (genes, variants, diseases, ...).
@@ -259,11 +303,30 @@ async def alliance_search(query: str, category: str | None = None, limit: int = 
                 "results": rows, "pagination": "upstream"})}
 
 
+async def alliance_disease_search(query: str, limit: int = 20, offset: int = 0) -> dict:
+    """Search Alliance disease entities by free text.
+
+    Thin wrapper over the same upstream /search endpoint used by
+    alliance_search: no category parameter is sent upstream (the endpoint
+    ignores it, verified live) and results are filtered locally to the
+    "disease_search_result" category, so the returned page reflects the
+    upstream page's slice of disease hits. category_totals shows the
+    upstream counts per category; the upstream "total" covers all
+    categories. Argument validation happens before any network request.
+    """
+    text(query, "query", 300)
+    page(limit, offset)  # validate before the network request
+    return await alliance_search(query, category="disease_search_result",
+                                 limit=limit, offset=offset)
+
+
 TOOLS = (
     alliance_gene,
     alliance_gene_phenotypes,
     alliance_orthologs,
     alliance_search,
+    alliance_disease_search,
+    alliance_alleles,
 )
 
 
