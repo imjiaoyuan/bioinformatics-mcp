@@ -28,12 +28,12 @@ SERVERS = {
     "chembl": (6, "chembl_search", {}),
     "cncb": (8, "cncb_genome", {}),
     "ena": (4, "ena_search", {}),
-    "ensembl": (7, "ensembl_lookup", {}),
+    "ensembl": (8, "ensembl_lookup", {}),
     "gdc": (6, "gdc_projects", {"limit": 0}),
     "gprofiler": (3, "gprofiler_enrichment", {}),
     "gwas": (5, "gwas_traits", {}),
     "interpro": (4, "interpro_search", {}),
-    "ncbi": (14, "ncbi_search", {}),
+    "ncbi": (17, "ncbi_search", {}),
     "opentargets": (6, "opentargets_search", {}),
     "pdb": (3, "pdb_entry", {}),
     "publications": (4, "publication_search", {}),
@@ -70,6 +70,9 @@ SERVERS = {
     "encode": (5, "encode_search", {}),
     "metagenomics": (5, "mgrast_project", {}),
     "phytozome": (5, "phytozome_organisms", {"limit": 0}),
+    "hgnc": (4, "hgnc_entry", {}),
+    "pubchem": (7, "pubchem_resolve", {}),
+    "alliance": (4, "alliance_gene", {}),
 }
 
 

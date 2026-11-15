@@ -178,12 +178,15 @@ record = await uniprot_entry("P12345")
 | `encode-mcp` | ENCODE Portal experiment, file, biosample-type and target metadata |
 | `metagenomics-mcp` | MG-RAST projects, metagenomes, samples and annotation profiles |
 | `phytozome-mcp` | Phytozome organism catalog, gene metadata and search (JGI account) |
+| `hgnc-mcp` | HGNC gene nomenclature: official symbols, aliases and cross-references |
+| `pubchem-mcp` | PubChem compounds, synonyms, descriptions, assays and annotations |
+| `alliance-mcp` | Alliance of Genome Resources genes, phenotypes and orthologs (FlyBase, WormBase, MGI, SGD, ZFIN, RGD) |
 
 The base install uses the official MCP Python SDK v2 (`mcp>=2,<3`), with
 `MCPServer` for provider and aggregated servers. Servers accept both legacy
 initialize-based clients and v2 discovery-based clients.
 
-The base install supplies all 50 commands and works on Python 3.10 through
+The base install supplies all 53 commands and works on Python 3.10 through
 3.14. `cellxgene-mcp` follows the same baseline: version listings, dataset
 search and H5AD URLs are served from public REST APIs with no extra
 dependencies. Only the cell-level Census tools (`cellxgene_cells`,
@@ -701,6 +704,27 @@ download-portal URLs; no files are downloaded. The v3 endpoint shapes are
 implemented defensively (unknown JSON fields pass through under `raw`)
 because Phytozome publishes no public API reference.
 
+### NCBI BLAST
+
+`ncbi-mcp` now covers the BLAST URL API. `blast_submit` posts a sequence and
+returns the RID plus the NCBI queue estimate; `blast_status` uses the
+lightweight CHECK_STATUS probe; `blast_results` fetches Text, HTML or JSON2_S
+results and never blocks server-side — while the job is queued it returns a
+waiting status with NCBI's one-minute polling guidance. All BLAST calls share
+the host-level pacing (11 s for blast.ncbi.nlm.nih.gov) and NCBI's ~100
+anonymous searches/day limit is documented. `EMAIL` is sent when provided via
+the tool parameter or `NCBI_EMAIL`.
+
+### Model organisms via the Alliance
+
+`alliance-mcp` aggregates FlyBase, WormBase, MGI, SGD, ZFIN and RGD through
+the Alliance of Genome Resources API: gene summaries, phenotype annotations
+and cross-species orthologs, plus aggregated search. Bare FlyBase
+(`FBgn0000606`) and WormBase (`WBGene00003055`) identifiers are normalized to
+the prefixed curies the API requires. The upstream `/gene/{id}/diseases`
+endpoint is retired, so no disease tool is provided; disease data remains
+available through `disgenet-mcp`, `opentargets-mcp` and `hpo-mcp`.
+
 Sources deliberately not integrated: the eQTL Catalogue REST API is deprecated
 (HTTP 410; FTP/tabix downloads only, outside this project's no-download scope)
 and the GWAS Atlas host is unreachable, so `eqtl-mcp` was dropped; GWAS trait
@@ -711,9 +735,11 @@ the FlyBase REST API (`api.flybase.org`) is retired and returns HTML, FlyMine
 is unreachable, and WormBase is behind a Cloudflare challenge with no public
 widget access; plant specialists RAP-DB, TAIR (Araport) and MGI expose no
 stable public REST API. Rice, Arabidopsis and other plant gene queries remain
-covered by `ensembl-mcp`
-(Ensembl Plants) and `uniprot_function` with a `taxon_id`; Drosophila and
-C. elegans gene data are reachable through `uniprot-mcp`, `string-mcp` and
+covered by `ensembl-mcp`, which now also reaches the fungi, metazoa and
+bacteria divisions (`ensembl_lookup_symbol`, division-aware species listing
+and `ensembl_homologs` compara choices). Drosophila and
+C. elegans gene data are served by `alliance-mcp` and remain reachable
+through `uniprot-mcp`, `string-mcp` and
 `intact-mcp`. JGI's Phytozome, which includes bryophyte genomes such as
 Physcomitrella, is served by `phytozome-mcp` with a JGI account instead.
 NCBI Taxonomy and GBIF taxonomy are now served by `taxonomy-mcp`.
@@ -735,7 +761,7 @@ python -m pip check
 ```
 
 Regression tests use mocked HTTP/SDK responses and need no network or API keys.
-Transport tests start all 50 installed console scripts from temporary working
+Transport tests start all 53 installed console scripts from temporary working
 directories, initialize stdio connections, discover tools and check validation
 responses without contacting providers. Local-only PDB/CNCB tools also exercise
 successful responses. The registered command list and tool counts are asserted
@@ -754,7 +780,7 @@ in any Python 3.10-3.13 environment.
   TileDB-SOMA wheel, verifies imports and runs the full suite including local SOMA.
 - A Python 3.12 packaging job builds an sdist and a wheel from that sdist, checks
   metadata with Twine, then installs each artifact into its own clean venv and
-  exercises all 50 installed MCP commands outside the source checkout.
+  exercises all 53 installed MCP commands outside the source checkout.
 
 Run the packaging checks locally with:
 
