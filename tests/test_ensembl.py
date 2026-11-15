@@ -1,4 +1,5 @@
 import json
+from unittest import mock
 
 import httpx
 
@@ -73,6 +74,47 @@ class PlantTests(HTTPTestCase):
                            (api.ensembl_homologs, {"identifier": "x", "homology_type": "bad"})]:
             with self.subTest(tool=func.__name__), self.assertRaises(ValueError):
                 await func(**args)
+
+    async def test_variation_lookup(self):
+        def handler(req):
+            self.assertTrue(req.url.path.endswith("/variation/oryza_sativa/vcZ240K4H"))
+            return httpx.Response(200, json={"name": "vcZ240K4H", "most_severe_consequence": "intergenic_variant"})
+        with self.mock_http(handler):
+            result = await api.ensembl_variation("oryza_sativa", "vcZ240K4H")
+            self.assertEqual(result["variant"]["name"], "vcZ240K4H")
+            self.assertEqual(result["species"], "oryza_sativa")
+        with self.assertRaises(httpx.HTTPStatusError):
+            with self.mock_http(lambda req: httpx.Response(400, json={"error": "rs1006 not found for oryza_sativa"})):
+                await api.ensembl_variation("oryza_sativa", "rs1006")
+        with self.assertRaises(httpx.HTTPStatusError):
+            with self.mock_http(lambda req: httpx.Response(404)):
+                await api.ensembl_variation("oryza_sativa", "vcMISSING")
+
+    async def test_variation_validation_no_network(self):
+        with mock.patch("servers.ensembl_mcp.api.request", side_effect=AssertionError("network call")):
+            for func, args in [(api.ensembl_variation, {"species": "bad species!", "variant_id": "rs699"}),
+                               (api.ensembl_variation, {"species": "oryza_sativa", "variant_id": "bad id!"}),
+                               (api.ensembl_region_variants, {"species": "oryza_sativa", "region": "no-colon-here"}),
+                               (api.ensembl_region_variants, {"species": "oryza_sativa", "region": "1:1-100", "limit": 0}),
+                               (api.ensembl_region_variants, {"species": "oryza_sativa", "region": "1:1-100", "limit": 201}),
+                               (api.ensembl_region_variants, {"species": "oryza_sativa", "region": "1:1-100", "offset": -1}),
+                               (api.ensembl_region_variants, {"species": "oryza_sativa", "region": "1:1-100", "offset": 10001})]:
+                with self.subTest(tool=func.__name__, args=args), self.assertRaises(ValueError):
+                    await func(**args)
+
+    async def test_region_variants_pagination(self):
+        def handler(req):
+            self.assertIn("/overlap/region/arabidopsis_thaliana/1:3631-4000", req.url.path)
+            self.assertEqual(req.url.params["feature"], "variation")
+            return httpx.Response(200, json=[{"id": f"v{i}", "start": 3631 + i} for i in range(5)])
+        with self.mock_http(handler):
+            page1 = await api.ensembl_region_variants("arabidopsis_thaliana", "1:3631-4000", limit=2)
+            self.assertEqual([v["id"] for v in page1["variants"]], ["v0", "v1"])
+            self.assertEqual(page1["total"], 5)
+            self.assertTrue(page1["truncated"])
+            page2 = await api.ensembl_region_variants("arabidopsis_thaliana", "1:3631-4000", limit=2, offset=4)
+            self.assertEqual([v["id"] for v in page2["variants"]], ["v4"])
+            self.assertFalse(page2["truncated"])
 
     async def test_api_failure(self):
         with self.mock_http(lambda req: httpx.Response(500)):

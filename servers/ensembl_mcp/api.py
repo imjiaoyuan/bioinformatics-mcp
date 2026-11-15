@@ -11,6 +11,10 @@ BASE = "https://rest.ensembl.org"
 # or dbSNP rs IDs.
 _ID = r"(?:ENS[A-Z]{0,4}[GTPE]\d{11}(?:\.\d+)?|[A-Za-z]{2,5}\d{1,3}[GgTtPp]\d{7}(?:[.-]\d+)?|FB[a-z]{2}\d{7}|WBGene\d{8}|[A-Za-z]{3}\d{3}[A-Za-z](?:-\d+)?|RS\d{8})"
 _REGION = r"[A-Za-z0-9_.-]+:\d{1,12}(?:[.:]\d{1,12})?(?:-[.:]?\d{1,12})?(?:\?.*)?"
+# Variant names: dbSNP rs IDs (rs699), EVA contig-style IDs (vcZ240K4H) and
+# 1001 Genomes temporary IDs (tmp_1_3651_C_G) — deliberately not the stable-ID
+# pattern, which must stay untouched.
+_VARIANT = r"[A-Za-z][A-Za-z0-9_.:|-]{1,120}"
 
 def _stable_id(value: str, name: str = "identifier") -> str:
     return valid_id(value.strip(), _ID, name)
@@ -119,6 +123,32 @@ async def ensembl_homologs(identifier: str, species: str = "oryza_sativa",
             "total": len(rows), "truncated": len(rows) > limit, "source_url": BASE + path}
 
 
+async def ensembl_variation(species: str, variant_id: str) -> dict:
+    """Fetch variant details for any Ensembl species (verified for rice EVA ids,
+    arabidopsis 1001 Genomes ids and human rs ids; rs ids are species-scoped)."""
+    species = _species_name(species)
+    variant_id = valid_id(variant_id.strip(), _VARIANT, "variant_id")
+    path = f"/variation/{species}/{variant_id}"
+    data = await _get(path)
+    return {"species": species, "variant": data, "source_url": BASE + path}
+
+async def ensembl_region_variants(species: str, region: str, limit: int = 20, offset: int = 0) -> dict:
+    """List variation features in a genomic region (verified for arabidopsis_thaliana,
+    saccharomyces_cerevisiae and oryza_sativa; drosophila_melanogaster returns an
+    empty list in live probing). Results are paginated locally with limit/offset."""
+    # Validate every argument before the network call (project convention).
+    species = _species_name(species)
+    region = _region(region)
+    bounded(limit, 200)
+    bounded(offset, 10_000, "offset", minimum=0)
+    path = f"/overlap/region/{species}/{region}"
+    rows = await _get(path, {"feature": "variation"})
+    page = rows[offset:offset + limit]
+    return {"species": species, "region": region, "variants": page, "total": len(rows),
+            "offset": offset, "truncated": offset + limit < len(rows),
+            "source_url": f"{BASE}{path}?feature=variation"}
+
+
 TOOLS = (
     ensembl_lookup,
     ensembl_lookup_symbol,
@@ -128,6 +158,8 @@ TOOLS = (
     ensembl_lookup_batch,
     ensembl_sequence,
     ensembl_homologs,
+    ensembl_variation,
+    ensembl_region_variants,
 )
 
 
