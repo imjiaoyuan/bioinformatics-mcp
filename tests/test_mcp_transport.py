@@ -79,6 +79,7 @@ SERVERS = {
     "datasets": (4, "dataset_assembly", {"accession": "bad"}),
     "complexportal": (3, "complexportal_search", {"limit": 0}),
     "rnacentral": (4, "rnacentral_entry", {"urs": "bad"}),
+    "ols": (5, "ols_search", {"query": ""}),
 }
 
 

@@ -74,6 +74,7 @@ expressionatlas-mcp = "servers.expressionatlas_mcp.server:main"
 datasets-mcp = "servers.datasets_mcp.server:main"
 complexportal-mcp = "servers.complexportal_mcp.server:main"
 rnacentral-mcp = "servers.rnacentral_mcp.server:main"
+ols-mcp = "servers.ols_mcp.server:main"
 
 [build-system]
 requires = ["hatchling>=1.32,<2"]
