@@ -85,6 +85,7 @@ SERVERS = {
     "unichem": (4, "unichem_source", {"src_id": "bad"}),
     "rxnorm": (3, "rxnorm_properties", {"rxcui": "bad"}),
     "omnipath": (4, "omnipath_interactions", {"proteins": []}),
+    "wikipathways": (3, "wikipathways_search", {"query": ""}),
 }
 
 

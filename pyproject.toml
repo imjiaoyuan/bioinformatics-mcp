@@ -80,6 +80,7 @@ jaspar-mcp = "servers.jaspar_mcp.server:main"
 unichem-mcp = "servers.unichem_mcp.server:main"
 rxnorm-mcp = "servers.rxnorm_mcp.server:main"
 omnipath-mcp = "servers.omnipath_mcp.server:main"
+wikipathways-mcp = "servers.wikipathways_mcp.server:main"
 
 [build-system]
 requires = ["hatchling>=1.32,<2"]
