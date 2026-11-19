@@ -84,6 +84,7 @@ SERVERS = {
     "jaspar": (2, "jaspar_matrix", {"matrix_id": "bad"}),
     "unichem": (4, "unichem_source", {"src_id": "bad"}),
     "rxnorm": (3, "rxnorm_properties", {"rxcui": "bad"}),
+    "omnipath": (4, "omnipath_interactions", {"proteins": []}),
 }
 
 

@@ -18,7 +18,7 @@ CATEGORIES: dict[int, tuple[str, tuple[str, ...]]] = {
         "uniprot", "pdb", "pdbe", "alphafold", "emdb", "interpro")),
     3: ("Pathways, networks and enrichment", (
         "kegg", "reactome", "string", "intact", "biogrid", "gprofiler",
-        "msigdb", "quickgo", "bigg", "complexportal", "enrichr", "jaspar")),
+        "msigdb", "quickgo", "bigg", "complexportal", "enrichr", "jaspar", "omnipath")),
     4: ("Expression and single cell", (
         "gtex", "hpa", "bgee", "panglao", "cellxgene", "singlecell",
         "expressionatlas")),
