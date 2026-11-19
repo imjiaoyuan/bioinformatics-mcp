@@ -81,6 +81,7 @@ SERVERS = {
     "rnacentral": (4, "rnacentral_entry", {"urs": "bad"}),
     "ols": (5, "ols_search", {"query": ""}),
     "enrichr": (3, "enrichr_enrich", {"user_list_id": "bad", "library": "ChEA_2022"}),
+    "jaspar": (2, "jaspar_matrix", {"matrix_id": "bad"}),
 }
 
 

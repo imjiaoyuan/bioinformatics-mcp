@@ -76,6 +76,7 @@ complexportal-mcp = "servers.complexportal_mcp.server:main"
 rnacentral-mcp = "servers.rnacentral_mcp.server:main"
 ols-mcp = "servers.ols_mcp.server:main"
 enrichr-mcp = "servers.enrichr_mcp.server:main"
+jaspar-mcp = "servers.jaspar_mcp.server:main"
 
 [build-system]
 requires = ["hatchling>=1.32,<2"]
