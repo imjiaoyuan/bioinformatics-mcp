@@ -92,6 +92,7 @@ SERVERS = {
     "pride": (2, "pride_project", {"accession": "bad"}),
     "bvbrc": (3, "bvbrc_genome", {"genome_id": "bad"}),
     "gnomad": (3, "gnomad_variant", {"variant_id": "bad"}),
+    "dgidb": (3, "dgidb_gene_matches", {"search_terms": []}),
 }
 
 
