@@ -83,17 +83,19 @@ async def ols_term(ontology: str, iri: str) -> dict:
 async def ols_ancestors(ontology: str, iri: str, limit: Annotated[int, Field(ge=1, le=100)] = 50,
                         offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """List the ancestor terms above one term in the ontology hierarchy."""
+    paging = page(limit, offset)
     terms, source = await _hal_terms(f"ontologies/{_ontology(ontology)}/terms/"
                                      f"{quote(quote(_iri(iri), safe=''), safe='')}/ancestors")
-    return {**source, **local_page(terms, limit, offset)}
+    return {**source, **local_page(terms, paging["limit"], paging["offset"])}
 
 
 async def ols_children(ontology: str, iri: str, limit: Annotated[int, Field(ge=1, le=100)] = 50,
                        offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """List the direct child terms below one term in the ontology hierarchy."""
+    paging = page(limit, offset)
     terms, source = await _hal_terms(f"ontologies/{_ontology(ontology)}/terms/"
                                      f"{quote(quote(_iri(iri), safe=''), safe='')}/children")
-    return {**source, **local_page(terms, limit, offset)}
+    return {**source, **local_page(terms, paging["limit"], paging["offset"])}
 
 
 TOOLS = (

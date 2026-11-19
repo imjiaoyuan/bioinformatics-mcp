@@ -58,8 +58,9 @@ async def rnacentral_sequence(urs: Sequence) -> dict:
 
 async def rnacentral_publications(urs: Sequence, limit: Annotated[int, Field(ge=1, le=100)] = 20) -> dict:
     """List literature references associated with one RNAcentral entry."""
+    paging = page(limit, 0)
     data, source = await json_response(f"{API}/rna/{_urs(urs)}/publications")
-    return {**source, **local_page(data.get("results", []), limit, 0),
+    return {**source, **local_page(data.get("results", []), paging["limit"], 0),
             "total": data.get("count", len(data.get("results", [])))}
 
 
