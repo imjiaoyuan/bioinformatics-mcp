@@ -87,6 +87,7 @@ SERVERS = {
     "omnipath": (4, "omnipath_interactions", {"proteins": []}),
     "wikipathways": (3, "wikipathways_search", {"query": ""}),
     "panelapp": (4, "panelapp_panel_genes", {"panel_id": "bad"}),
+    "mgnify": (4, "mgnify_study", {"accession": "bad"}),
 }
 
 
