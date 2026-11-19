@@ -24,7 +24,7 @@ CATEGORIES: dict[int, tuple[str, tuple[str, ...]]] = {
         "expressionatlas")),
     5: ("Disease, clinical and drug", (
         "gdc", "cbioportal", "depmap", "civic", "clinvar", "disgenet",
-        "mondo", "hpo", "pharmgkb", "opentargets", "gwas", "chembl",
+        "mondo", "hpo", "pharmgkb", "opentargets", "gwas", "chembl", "panelapp",
         "pubchem", "clinicaltrials", "unichem", "rxnorm")),
     6: ("Archives, literature and terminology", (
         "biostudies", "publications", "mesh", "ols")),

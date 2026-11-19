@@ -86,6 +86,7 @@ SERVERS = {
     "rxnorm": (3, "rxnorm_properties", {"rxcui": "bad"}),
     "omnipath": (4, "omnipath_interactions", {"proteins": []}),
     "wikipathways": (3, "wikipathways_search", {"query": ""}),
+    "panelapp": (4, "panelapp_panel_genes", {"panel_id": "bad"}),
 }
 
 
