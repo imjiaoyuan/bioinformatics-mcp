@@ -88,6 +88,7 @@ SERVERS = {
     "wikipathways": (3, "wikipathways_search", {"query": ""}),
     "panelapp": (4, "panelapp_panel_genes", {"panel_id": "bad"}),
     "mgnify": (4, "mgnify_study", {"accession": "bad"}),
+    "metabolights": (4, "metabolights_study", {"accession": "bad"}),
 }
 
 

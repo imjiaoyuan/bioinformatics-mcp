@@ -27,7 +27,7 @@ CATEGORIES: dict[int, tuple[str, tuple[str, ...]]] = {
         "mondo", "hpo", "pharmgkb", "opentargets", "gwas", "chembl", "panelapp",
         "pubchem", "clinicaltrials", "unichem", "rxnorm")),
     6: ("Archives, literature and terminology", (
-        "biostudies", "publications", "mesh", "ols")),
+        "biostudies", "publications", "mesh", "ols", "pride", "metabolights")),
     7: ("Model organisms and comparative genomics", (
         "alliance", "phytozome")),
     8: ("Metagenomics", ("metagenomics", "mgnify")),
