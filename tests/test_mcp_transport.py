@@ -78,6 +78,7 @@ SERVERS = {
     "expressionatlas": (2, "atlas_experiment", {"accession": "bad"}),
     "datasets": (4, "dataset_assembly", {"accession": "bad"}),
     "complexportal": (3, "complexportal_search", {"limit": 0}),
+    "rnacentral": (4, "rnacentral_entry", {"urs": "bad"}),
 }
 
 
