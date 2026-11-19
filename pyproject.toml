@@ -85,6 +85,7 @@ panelapp-mcp = "servers.panelapp_mcp.server:main"
 mgnify-mcp = "servers.mgnify_mcp.server:main"
 metabolights-mcp = "servers.metabolights_mcp.server:main"
 pride-mcp = "servers.pride_mcp.server:main"
+bvbrc-mcp = "servers.bvbrc_mcp.server:main"
 
 [build-system]
 requires = ["hatchling>=1.32,<2"]

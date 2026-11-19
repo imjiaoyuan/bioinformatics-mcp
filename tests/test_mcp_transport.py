@@ -90,6 +90,7 @@ SERVERS = {
     "mgnify": (4, "mgnify_study", {"accession": "bad"}),
     "metabolights": (4, "metabolights_study", {"accession": "bad"}),
     "pride": (2, "pride_project", {"accession": "bad"}),
+    "bvbrc": (3, "bvbrc_genome", {"genome_id": "bad"}),
 }
 
 
