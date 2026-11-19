@@ -168,7 +168,7 @@ class NumberedSelectionTests(unittest.TestCase):
     def test_category_number_selects_installed_providers_in_slot_order(self):
         with patch.object(cli, "find_command", return_value="/usr/bin/x-mcp"):
             config = json.loads(self.invoke("config", "7"))
-        self.assertEqual(list(config["mcpServers"]), ["alliance", "phytozome"])
+        self.assertEqual(list(config["mcpServers"]), ["alliance", "phytozome", "opentree"])
 
     def test_numbers_and_names_mix_and_deduplicate(self):
         from common.categories import resolve_selections

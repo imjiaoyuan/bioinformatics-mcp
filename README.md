@@ -201,6 +201,23 @@ record = await uniprot_entry("P12345")
 | `expressionatlas-mcp` | EBI Expression Atlas experiment catalog and details |
 | `datasets-mcp` | NCBI Datasets v2 assembly, gene and taxonomy metadata reports |
 | `alliance-mcp` | Alliance of Genome Resources genes, phenotypes and orthologs (FlyBase, WormBase, MGI, SGD, ZFIN, RGD) |
+| `rnacentral-mcp` | RNAcentral ncRNA sequences, EBI Search, publications and metadata |
+| `bvbrc-mcp` | BV-BRC (PATRIC) pathogen genome search, metadata and coding features |
+| `gnomad-mcp` | gnomAD variant allele frequencies, gene constraint and gene search (GraphQL) |
+| `complexportal-mcp` | Complex Portal curated complexes: search, details and participants |
+| `wikipathways-mcp` | WikiPathways catalogue: organisms, local search and species listings |
+| `omnipath-mcp` | OmniPath signaling interactions, enzyme-PTM sites, complexes and annotations |
+| `enrichr-mcp` | Enrichr enrichment against 230+ gene set libraries |
+| `stitch-mcp` | STITCH chemical-protein interactions and enrichment |
+| `jaspar-mcp` | JASPAR transcription factor binding profiles and PFMs |
+| `panelapp-mcp` | PanelApp gene panels: versions, genes with confidence levels (Genomics England) |
+| `rxnorm-mcp` | RxNorm drug name resolution, concept properties and related concepts |
+| `dgidb-mcp` | DGIdb drug-gene interactions and fuzzy gene matching (GraphQL) |
+| `pride-mcp` | PRIDE proteomics projects: keyword search and metadata |
+| `metabolights-mcp` | MetaboLights metabolomics studies, files and assays |
+| `ols-mcp` | OLS4 unified ontology term search, hierarchy and cross-EBI ontology lookup |
+| `opentree-mcp` | Open Tree of Life name resolution, synthetic tree nodes and build info |
+| `unichem-mcp` | UniChem structure cross-references between chemical databases |
 
 #### Selecting providers by category number
 
@@ -217,7 +234,7 @@ The base install uses the official MCP Python SDK v2 (`mcp>=2,<3`), with
 `MCPServer` for provider and aggregated servers. Servers accept both legacy
 initialize-based clients and v2 discovery-based clients.
 
-The base install supplies all 57 commands and works on Python 3.10 through
+The base install supplies all 76 commands and works on Python 3.10 through
 3.14. `cellxgene-mcp` follows the same baseline: version listings, dataset
 search and H5AD URLs are served from public REST APIs with no extra
 dependencies. Only the cell-level Census tools (`cellxgene_cells`,
