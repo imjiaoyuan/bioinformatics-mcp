@@ -37,8 +37,15 @@ class BuildEntriesTests(unittest.TestCase):
                          ["--from", cli.SOURCE + "@v0.2.0", "ensembl-mcp"])
 
     def test_serve_entry_uses_the_requested_name(self):
-        entries = cli.build_entries(["ensembl"], serve=True, uvx=False, name="bio-core")
+        with patch.object(cli, "find_command", return_value="/usr/bin/bioinformatics-mcp"):
+            entries = cli.build_entries(["ensembl"], serve=True, uvx=False, name="bio-core")
         self.assertEqual(list(entries), ["bio-core"])
+        self.assertEqual(entries["bio-core"]["args"], ["serve", "ensembl"])
+
+    def test_serve_entry_fails_when_the_command_is_not_installed(self):
+        with patch.object(cli, "find_command", side_effect=ValueError("Cannot find bioinformatics-mcp")):
+            with self.assertRaises(ValueError):
+                cli.build_entries(["ensembl"], serve=True, uvx=False, name="bio-core")
 
 
 class MergeConfigTests(unittest.TestCase):
