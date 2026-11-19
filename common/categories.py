@@ -29,7 +29,7 @@ CATEGORIES: dict[int, tuple[str, tuple[str, ...]]] = {
     6: ("Archives, literature and terminology", (
         "biostudies", "publications", "mesh", "ols", "pride", "metabolights")),
     7: ("Model organisms and comparative genomics", (
-        "alliance", "phytozome")),
+        "alliance", "phytozome", "opentree")),
     8: ("Metagenomics", ("metagenomics", "mgnify")),
     9: ("Software and packages", (
         "bioconductor", "anaconda")),

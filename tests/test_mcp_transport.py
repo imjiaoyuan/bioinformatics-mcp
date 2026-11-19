@@ -94,6 +94,7 @@ SERVERS = {
     "gnomad": (3, "gnomad_variant", {"variant_id": "bad"}),
     "dgidb": (3, "dgidb_gene_matches", {"search_terms": []}),
     "stitch": (3, "stitch_interactions", {"proteins": ["TP53;drop"]}),
+    "opentree": (3, "opentree_node", {"ott_id": "bad"}),
 }
 
 
