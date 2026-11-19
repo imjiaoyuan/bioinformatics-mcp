@@ -25,7 +25,7 @@ CATEGORIES: dict[int, tuple[str, tuple[str, ...]]] = {
     5: ("Disease, clinical and drug", (
         "gdc", "cbioportal", "depmap", "civic", "clinvar", "disgenet",
         "mondo", "hpo", "pharmgkb", "opentargets", "gwas", "chembl",
-        "pubchem", "clinicaltrials")),
+        "pubchem", "clinicaltrials", "unichem")),
     6: ("Archives, literature and terminology", (
         "biostudies", "publications", "mesh", "ols")),
     7: ("Model organisms and comparative genomics", (
