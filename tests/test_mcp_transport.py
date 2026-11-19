@@ -80,6 +80,7 @@ SERVERS = {
     "complexportal": (3, "complexportal_search", {"limit": 0}),
     "rnacentral": (4, "rnacentral_entry", {"urs": "bad"}),
     "ols": (5, "ols_search", {"query": ""}),
+    "enrichr": (3, "enrichr_enrich", {"user_list_id": "bad", "library": "ChEA_2022"}),
 }
 
 

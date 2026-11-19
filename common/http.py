@@ -94,7 +94,7 @@ async def _reserve_slot(host: str, interval: float) -> None:
 
 
 async def request(method: str, url: str, *, params: dict | None = None,
-                  json: Any = None, data: dict | None = None,
+                  json: Any = None, data: dict | None = None, files: dict | None = None,
                   headers: dict[str, str] | None = None,
                   max_bytes: int = 8_000_000, interval: float = 0.35,
                   retryable: bool = False, timeout: float = 45.0,
@@ -110,7 +110,7 @@ async def request(method: str, url: str, *, params: dict | None = None,
     for attempt in range(2):
         await _reserve_slot(host, interval)
         try:
-            async with client.stream(method, url, params=params, json=json, data=data,
+            async with client.stream(method, url, params=params, json=json, data=data, files=files,
                                      headers=headers, timeout=timeout) as response:
                 if (method == "GET" or retryable) and response.status_code in {429, 500, 502, 503, 504} and attempt == 0:
                     try:
