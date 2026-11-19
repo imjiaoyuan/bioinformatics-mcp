@@ -91,6 +91,7 @@ SERVERS = {
     "metabolights": (4, "metabolights_study", {"accession": "bad"}),
     "pride": (2, "pride_project", {"accession": "bad"}),
     "bvbrc": (3, "bvbrc_genome", {"genome_id": "bad"}),
+    "gnomad": (3, "gnomad_variant", {"variant_id": "bad"}),
 }
 
 

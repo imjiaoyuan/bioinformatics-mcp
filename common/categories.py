@@ -13,7 +13,7 @@ import re
 CATEGORIES: dict[int, tuple[str, tuple[str, ...]]] = {
     1: ("Sequence and genome annotation", (
         "ncbi", "ena", "ensembl", "sra", "cncb", "ucsc", "vep", "mygene",
-        "hgnc", "taxonomy", "variation", "encode", "datasets", "rnacentral", "bvbrc")),
+        "hgnc", "taxonomy", "variation", "encode", "datasets", "rnacentral", "bvbrc", "gnomad")),
     2: ("Protein and structure", (
         "uniprot", "pdb", "pdbe", "alphafold", "emdb", "interpro")),
     3: ("Pathways, networks and enrichment", (
