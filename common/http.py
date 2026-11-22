@@ -100,24 +100,24 @@ async def request(method: str, url: str, *, params: dict | None = None,
                   retryable: bool = False, timeout: float = 45.0,
                   retry_after_header: str = "Retry-After",
                   retry_after_cap: float = 5.0) -> httpx.Response:
-    """Bound responses and retry transient GET failures or explicitly idempotent requests once.
+    """Bound responses and retry transient GET failures or explicitly idempotent requests with exponential backoff.
 
     The per-host interval limits the request rate; it never serializes response
     transfer because each request claims a start time and then runs unlocked.
     """
     host = urlsplit(url).netloc
     client = await _shared_client(timeout)
-    for attempt in range(2):
+    for attempt in range(3):
         await _reserve_slot(host, interval)
         try:
             async with client.stream(method, url, params=params, json=json, data=data, files=files,
                                      headers=headers, timeout=timeout) as response:
-                if (method == "GET" or retryable) and response.status_code in {429, 500, 502, 503, 504} and attempt == 0:
+                if (method == "GET" or retryable) and response.status_code in {429, 500, 502, 503, 504} and attempt < 2:
                     try:
-                        delay = min(retry_after_cap, max(1.0, float(response.headers.get(retry_after_header, "1"))))
+                        floor = float(response.headers.get(retry_after_header, 2 ** attempt))
                     except ValueError:
-                        delay = 1.0
-                    await asyncio.sleep(delay)
+                        floor = 2 ** attempt
+                    await asyncio.sleep(min(retry_after_cap, max(1.0, floor)))
                     continue
                 safe_request = httpx.Request(method, safe_url(response.url))
                 try:
