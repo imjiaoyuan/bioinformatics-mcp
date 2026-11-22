@@ -15,6 +15,8 @@ from common.version import installed_version, latest_version
 
 PACKAGE = "bioinformatics-mcp"
 _CREDENTIAL_VARIABLES = ("_EMAIL", "_API_KEY", "_PASSWORD")
+# Free keys that only unlock higher request rates or bonus data are optional.
+_OPTIONAL_KEY_VARIABLES = {"NCBI_API_KEY"}
 
 
 async def probe(command: str) -> list[str]:
@@ -59,7 +61,8 @@ def report(providers: list[str], *, check_release: bool) -> int:
                 print(f"latest release: {latest} (up to date)")
     for provider in providers:
         required = [name for name in ENVIRONMENT_VARIABLES.get(provider, [])
-                    if name.endswith(_CREDENTIAL_VARIABLES)]
+                    if name.endswith(_CREDENTIAL_VARIABLES)
+                    and name not in _OPTIONAL_KEY_VARIABLES]
         missing = [name for name in required if not os.getenv(name)]
         if missing:
             failures += 1
@@ -72,6 +75,11 @@ def report(providers: list[str], *, check_release: bool) -> int:
             print(f"✗ {provider}: {type(error).__name__}: {error}")
             continue
         print(f"✓ {provider}: {len(tools)} tools")
+        hints = [name for name in ENVIRONMENT_VARIABLES.get(provider, [])
+                 if name.endswith("_API_KEY") and not os.getenv(name)
+                 and name not in required]
+        if hints:
+            print(f"  hint: set {', '.join(hints)} for higher request rates")
     return failures
 
 
