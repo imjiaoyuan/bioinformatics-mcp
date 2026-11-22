@@ -17,8 +17,11 @@ class HTTPTestCase(unittest.IsolatedAsyncioTestCase):
         transport = httpx.MockTransport(handler)
         from contextlib import ExitStack
         stack = ExitStack()
-        stack.enter_context(patch("httpx.AsyncClient",
-                                  side_effect=lambda **kw: client_type(transport=transport, **kw)))
+
+        def build(**options):
+            options.pop("http2", None)
+            return client_type(transport=transport, **options)
+        stack.enter_context(patch("httpx.AsyncClient", side_effect=build))
         # The shared client caches its transport; force a rebuild for each mock.
         stack.enter_context(patch.object(http, "_client", None))
         return stack
