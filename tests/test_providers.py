@@ -16,7 +16,11 @@ class ProviderTests(unittest.IsolatedAsyncioTestCase):
     def mock_http(self, handler):
         client_type = httpx.AsyncClient
         transport = httpx.MockTransport(handler)
-        return patch("httpx.AsyncClient", side_effect=lambda **kw: client_type(transport=transport, **kw))
+
+        def build(**options):
+            options.pop("http2", None)  # Mock transports negotiate no HTTP version.
+            return client_type(transport=transport, **options)
+        return patch("httpx.AsyncClient", side_effect=build)
 
     async def test_anaconda_search_uses_name_and_bounds_results(self):
         def handler(request):

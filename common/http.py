@@ -10,6 +10,12 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
+try:
+    import h2  # noqa: F401  # Optional: enables HTTP/2 multiplexing on the shared client.
+    _HTTP2 = True
+except ImportError:  # pragma: no cover - degrade to HTTP/1.1 when the extra is absent.
+    _HTTP2 = False
+
 # One lock per host guards only the microsecond-sized "claim the next time
 # slot" section below; sleeping, response transfer, and retries run outside
 # the lock so slow responses never serialize unrelated requests.
@@ -77,7 +83,7 @@ async def _shared_client(timeout: float) -> httpx.AsyncClient:
         if _client is not None and _client_loop is not None and not _client_loop.is_closed():
             await _client.aclose()
         _client = httpx.AsyncClient(
-            timeout=timeout, follow_redirects=True, http2=True,
+            timeout=timeout, follow_redirects=True, http2=_HTTP2,
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
             headers={"User-Agent": "bioinformatics-mcp/0.1"})
         _client_loop = loop
