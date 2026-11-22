@@ -37,8 +37,9 @@ def page(limit: int, offset: int) -> dict:
 
 
 async def json_response(url: str, params: dict | None = None, *, body: Any = None,
+                        headers: dict[str, str] | None = None,
                         interval: float = 0.35, max_bytes: int = 8_000_000,
-                        ttl: int = 0, headers: dict[str, str] | None = None) -> tuple[Any, dict]:
+                        ttl: int = 0) -> tuple[Any, dict]:
     """Fetch JSON, optionally caching idempotent GETs for ``ttl`` seconds (256-entry LRU)."""
     key: str | None = None
     if ttl > 0 and body is None:

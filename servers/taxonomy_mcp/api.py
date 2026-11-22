@@ -15,7 +15,7 @@ from urllib.parse import quote
 
 from pydantic import Field
 
-from common.api import local_page, page
+from common.api import json_response, local_page, page
 from common.http import bounded, identifier, request, safe_url, text
 
 BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
@@ -166,15 +166,14 @@ async def taxon_gbif_match(name: str, strict: bool = False) -> dict:
     (raise nothing, so callers can inspect the near-miss alternatives).
     """
     value = text(name, "name", 200)
-    response = await request("GET", f"{GBIF}/match", params={"name": value, "strict": str(strict).lower()},
-                             interval=GBIF_INTERVAL)
-    data = response.json()
+    data, source = await json_response(f"{GBIF}/match", {"name": value, "strict": str(strict).lower()},
+                                       interval=GBIF_INTERVAL, ttl=600)
     if match_type := data.get("matchType"):
         if match_type == "NONE":
             return {"match_type": "NONE", "name": value, "usage_key": None,
                     "scientific_name": None, "rank": None, "confidence": 0,
                     "synonyms": [], "note": "No GBIF backbone match",
-                    "source_url": safe_url(response.url)}
+                    "source_url": source["source_url"]}
         return {"match_type": match_type, "name": value,
                 "usage_key": data.get("usageKey"),
                 "scientific_name": data.get("scientificName"),
@@ -184,7 +183,7 @@ async def taxon_gbif_match(name: str, strict: bool = False) -> dict:
                 "kingdom": data.get("kingdom"), "phylum": data.get("phylum"),
                 "class": data.get("class"), "order": data.get("order"),
                 "family": data.get("family"), "genus": data.get("genus"),
-                "synonyms": [], "source_url": safe_url(response.url)}
+                "synonyms": [], "source_url": source["source_url"]}
     raise RuntimeError(f"GBIF returned no matchType for name {value!r}")
 
 
@@ -226,11 +225,10 @@ async def taxon_gbif_species(usage_key: Annotated[int, Field(ge=1, le=99_999_999
     taxa collected across paginated /children calls and sliced locally.
     """
     key = bounded(usage_key, 99_999_999_999, "usage_key", 1)
-    response = await request("GET", f"{GBIF}/{key}", interval=GBIF_INTERVAL)
-    detail = response.json()
+    detail, source = await json_response(f"{GBIF}/{key}", interval=GBIF_INTERVAL, ttl=600)
     if "key" not in detail:
         raise ValueError(f"No GBIF backbone usage found for key {key}")
-    source_url = safe_url(response.url)
+    source_url = source["source_url"]
     rows: list[dict[str, Any]] = []
     if detail.get("numDescendants"):
         child_rows, children_url, _ = await _gbif_rows(f"{GBIF}/{key}/children", {})

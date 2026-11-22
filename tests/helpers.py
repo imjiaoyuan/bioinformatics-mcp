@@ -3,13 +3,14 @@ from unittest.mock import patch
 
 import httpx
 
-from common import http
+from common import api, http
 
 
 class HTTPTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         http._locks.clear()
         http._next_slot.clear()
+        api._cache.clear()
 
     def mock_http(self, handler):
         client_type = httpx.AsyncClient

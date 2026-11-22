@@ -28,7 +28,7 @@ def _search_query(value: str) -> str:
 
 
 async def _get(path: str, params: dict | None = None) -> tuple[dict | list, dict]:
-    return await json_response(f"{BASE}{path}", params)
+    return await json_response(f"{BASE}{path}", params, ttl=600)
 
 
 async def hpo_search(query: str, limit: Limit = 20, page: PageIndex = 0) -> dict:

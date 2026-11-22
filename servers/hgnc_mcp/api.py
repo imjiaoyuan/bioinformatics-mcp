@@ -12,7 +12,8 @@ from __future__ import annotations
 from typing import Any
 
 from common.api import local_page
-from common.http import identifier, request, text
+from common.api import json_response
+from common.http import identifier, text
 
 BASE_URL = "https://rest.genenames.org"
 HEADERS = {"Accept": "application/json"}
@@ -27,9 +28,8 @@ _DOC_FIELDS = (
 
 
 async def _fetch_json(path: str) -> tuple[dict[str, Any], str]:
-    response = await request("GET", f"{BASE_URL}{path}", headers=HEADERS)
-    body = response.json()
-    return body.get("response") or {}, str(response.url)
+    body, source = await json_response(f"{BASE_URL}{path}", headers=HEADERS, ttl=600)
+    return body.get("response") or {}, source["source_url"]
 
 
 def _doc(entry: dict[str, Any]) -> dict[str, Any]:

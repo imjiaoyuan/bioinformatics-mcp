@@ -21,7 +21,7 @@ def _go_ids(values: list[str], name: str = "go_ids") -> list[str]:
 
 
 async def _get(path: str, params: dict | None = None) -> dict:
-    data, source = await json_response(f"{BASE}/{path}", params)
+    data, source = await json_response(f"{BASE}/{path}", params, ttl=600)
     return {**source, **data}
 
 
@@ -66,7 +66,8 @@ async def quickgo_slim(go_ids: list[str], slim_ids: list[str],
     slim_set = set(slims)
     relations = [choice(part.strip(), RELATIONS, "relation") for part in relation.split(",") if part.strip()]
     data, source = await json_response(
-        f"{BASE}/ontology/go/terms/{','.join(_go_ids(go_ids))}/ancestors", {"relation": ",".join(relations)})
+        f"{BASE}/ontology/go/terms/{','.join(_go_ids(go_ids))}/ancestors",
+        {"relation": ",".join(relations)}, ttl=600)
     rows = [{"term": term["id"], "name": term.get("name"), "aspect": term.get("aspect"),
              "slim_id": nearest, "direct": nearest == term["id"]}
             for term in data.get("results", [])
