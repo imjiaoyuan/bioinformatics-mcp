@@ -1,6 +1,6 @@
 # bioinformatics-mcp
 
-Independent MCP servers for bioinformatics data services: install once, connect any MCP client, call ~300 read-only tools across 56 providers.
+Independent MCP servers for bioinformatics data services: install once, connect any MCP client, call ~360 read-only tools across 74 providers.
 
 ### Human quickstart
 
@@ -790,7 +790,7 @@ python -m pip check
 ```
 
 Regression tests use mocked HTTP/SDK responses and need no network or API keys.
-Transport tests start all 56 installed console scripts from temporary working
+Transport tests start all 75 installed console scripts from temporary working
 directories, initialize stdio connections, discover tools and check validation
 responses without contacting providers. Local-only PDB/CNCB tools also exercise
 successful responses. The registered command list and tool counts are asserted
@@ -803,7 +803,7 @@ in `tests/test_mcp_transport.py`; update it when adding a server or tool.
   tests on Python 3.10, 3.11, 3.12, 3.13 and 3.14.
 - A Python 3.12 packaging job builds an sdist and a wheel from that sdist, checks
   metadata with Twine, then installs each artifact into its own clean venv and
-  exercises all 56 installed MCP commands outside the source checkout.
+  exercises all 75 installed MCP commands outside the source checkout.
 
 Run the packaging checks locally with:
 
