@@ -504,24 +504,33 @@ async def _ena_section(f: Filters, limit: int, metadata_limit: int) -> dict[str,
     records: dict[str, dict] = {}
     queries, pages = [], []
     page_errors = []
+    prepared = []
     for window in windows:
         query = ena_query(window, taxid, genus or f.include_descendants)
         if not query:
             raise ValueError("No searchable ENA constraints; specify organism, assay, tissue or condition")
         params = {"result": "read_run", "query": query, "fields": ENA_RUN_FIELDS,
                   "format": "json", "limit": limit, "offset": f.offset}
+        prepared.append((query, params))
+
+    async def fetch_window(params: dict) -> list[dict]:
+        response = await request("GET", ENA_PORTAL, params=params)
+        rows = response.json()
+        if not isinstance(rows, list) or any(not isinstance(row, dict) or not row.get("run_accession") for row in rows):
+            raise ValueError("ENA returned an invalid run report")
+        return rows
+
+    # Run windows concurrently; the per-host rate limiter still spaces their starts.
+    outcomes = await asyncio.gather(*(fetch_window(params) for _, params in prepared), return_exceptions=True)
+    for (query, params), outcome in zip(prepared, outcomes):
         source_url = ENA_PORTAL + "?" + urlencode(params)
         queries.append(query)
-        try:
-            response = await request("GET", ENA_PORTAL, params=params)
-            rows = response.json()
-            if not isinstance(rows, list) or any(not isinstance(row, dict) or not row.get("run_accession") for row in rows):
-                raise ValueError("ENA returned an invalid run report")
-        except Exception as exc:
-            page_errors.append(exc)
+        if isinstance(outcome, BaseException):
+            page_errors.append(outcome)
             pages.append({"query": query, "source_url": source_url, "status": "error",
-                          "error": {"type": type(exc).__name__, "message": "ENA window failed"}})
+                          "error": {"type": type(outcome).__name__, "message": "ENA window failed"}})
             continue
+        rows = outcome
         pages.append({"query": query, "source_url": source_url, "returned": len(rows),
                       "status": "ok", "truncated": len(rows) >= limit,
                       "next_offset": f.offset + limit if len(rows) >= limit else None})
