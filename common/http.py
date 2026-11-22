@@ -77,7 +77,7 @@ async def _shared_client(timeout: float) -> httpx.AsyncClient:
         if _client is not None and _client_loop is not None and not _client_loop.is_closed():
             await _client.aclose()
         _client = httpx.AsyncClient(
-            timeout=timeout, follow_redirects=True,
+            timeout=timeout, follow_redirects=True, http2=True,
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
             headers={"User-Agent": "bioinformatics-mcp/0.1"})
         _client_loop = loop
