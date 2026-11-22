@@ -20,7 +20,7 @@ CATEGORIES: dict[int, tuple[str, tuple[str, ...]]] = {
         "kegg", "reactome", "string", "intact", "biogrid", "gprofiler",
         "msigdb", "quickgo", "bigg", "complexportal", "enrichr", "jaspar", "omnipath", "wikipathways", "stitch")),
     4: ("Expression and single cell", (
-        "gtex", "hpa", "bgee", "panglao", "cellxgene", "singlecell",
+        "gtex", "hpa", "bgee", "panglao", "singlecell",
         "expressionatlas")),
     5: ("Disease, clinical and drug", (
         "gdc", "cbioportal", "depmap", "civic", "clinvar", "disgenet",

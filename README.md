@@ -1,6 +1,6 @@
 # bioinformatics-mcp
 
-Independent MCP servers for bioinformatics data services: install once, connect any MCP client, call ~380 read-only tools across 57 providers.
+Independent MCP servers for bioinformatics data services: install once, connect any MCP client, call ~300 read-only tools across 56 providers.
 
 ### Human quickstart
 
@@ -109,8 +109,8 @@ See [Connecting MCP clients](docs/mcp.md) for client-specific instructions.
 
 Pushing a `v*` tag automatically runs the release workflow. The tag must match
 the version in `pyproject.toml` (for example, `v0.1.0` for version `0.1.0`).
-The workflow reuses the full CI suite, including the Python version matrix,
-optional CELLxGENE checks, and clean installation of the wheel and source
+The workflow reuses the full CI suite, including the Python version matrix
+and clean installation of the wheel and source
 distribution. Only after all checks pass does it publish a GitHub Release with
 those validated packages and `SHA256SUMS`.
 
@@ -159,7 +159,6 @@ record = await uniprot_entry("P12345")
 | `interpro-mcp` | InterPro/Pfam families, domains, GO annotations and protein matches |
 | `gdc-mcp` | GDC/TCGA projects, cases, file metadata and manifests |
 | `reactome-mcp` | Pathways, reactions, participants and gene-to-pathway mapping |
-| `cellxgene-mcp` | CELLxGENE Census metadata and bounded expression slices (optional SDK) |
 | `chembl-mcp` | Compounds, targets, assays, measured activities and mechanisms |
 | `gwas-mcp` | GWAS Catalog REST v2 traits, studies, curated associations and variants |
 | `opentargets-mcp` | Target/disease/drug annotations, association scores and evidence |
@@ -234,26 +233,10 @@ The base install uses the official MCP Python SDK v2 (`mcp>=2,<3`), with
 `MCPServer` for provider and aggregated servers. Servers accept both legacy
 initialize-based clients and v2 discovery-based clients.
 
-The base install supplies all 76 commands and works on Python 3.10 through
-3.14. `cellxgene-mcp` follows the same baseline: version listings, dataset
-search and H5AD URLs are served from public REST APIs with no extra
-dependencies. Only the cell-level Census tools (`cellxgene_cells`,
-`cellxgene_genes`, `cellxgene_expression`) need the optional SDK, whose native
-TileDB-SOMA wheels currently cover Python 3.10-3.13 only. Without the SDK
-those three tools return a clear error; everything else keeps working. To
-enable them, use a separate 3.10-3.13 environment:
-
-```bash
-python3.12 -m venv .venv-cellxgene
-source .venv-cellxgene/bin/activate
-python -m pip install -e '.[cellxgene]'
-```
-
-Any Python 3.10-3.13 works for this extra; 3.12 is one known-good choice.
+The base install supplies all 75 commands and works on Python 3.10 through
+3.14.
 
 This uses standard Python, venv and pip. No additional environment manager is required.
-Configure CELLxGENE with `.venv-cellxgene/bin/cellxgene-mcp`; other commands can
-continue using the original `.venv`.
 
 ## Agent configuration
 
@@ -571,30 +554,6 @@ accepts `UniProt` or `Ensembl` as the resource and defaults to human. These tool
 retrieve pathway content; use the existing g:Profiler tools for enrichment.
 [Reactome Content Service](https://reactome.org/dev/content-service).
 
-### CELLxGENE Census
-
-Tools: `cellxgene_versions`, `cellxgene_datasets`, `cellxgene_cells`,
-`cellxgene_genes`, `cellxgene_expression`, `cellxgene_dataset_url`. Install the
-optional extra as described above. Human and mouse are supported. Metadata tools
-resolve `stable`/`latest` to a dated release and return that version explicitly.
-Cell filters match exact tissue, cell-type, disease and dataset labels.
-
-Metadata scans inspect a bounded `soma_joinid` window: `after_joinid=-1`,
-`scan_size=1000` by default (maximum 10,000), and return at most `limit` rows
-(maximum 100). Continue with `next_after_joinid` while `has_more` is true, keeping
-the returned dated version fixed. An empty window can have matches in later
-windows. `truncated` means more matching rows were found within the current
-window; `has_more` also accounts for unsearched windows. Cells are not deduplicated
-into biological samples; `is_primary_data` is retained when available.
-
-Expression reads require a dated `version`, explicit cell `soma_joinid` values
-from that release, and feature IDs (maximum 100 cells × 100 genes). Returned
-cell/gene metadata defines the matrix axis order, with missing IDs reported.
-The `raw` layer is returned without normalization; zeros alone do not establish
-that a feature was assayed in every source dataset. Dataset URLs return the
-official source H5AD locator and start no download.
-[Census Python API](https://chanzuckerberg.github.io/cellxgene-census/python-api.html).
-
 ### ChEMBL
 
 Tools: `chembl_search`, `chembl_molecule`, `chembl_target`, `chembl_activities`,
@@ -831,26 +790,20 @@ python -m pip check
 ```
 
 Regression tests use mocked HTTP/SDK responses and need no network or API keys.
-Transport tests start all 57 installed console scripts from temporary working
+Transport tests start all 56 installed console scripts from temporary working
 directories, initialize stdio connections, discover tools and check validation
 responses without contacting providers. Local-only PDB/CNCB tools also exercise
 successful responses. The registered command list and tool counts are asserted
 in `tests/test_mcp_transport.py`; update it when adding a server or tool.
-A local SOMA dataframe test runs when the optional CELLxGENE dependency is
-installed and skips otherwise. To run that test, install `'.[dev,cellxgene]'`
-in any Python 3.10-3.13 environment.
-
 ### Continuous integration
 
 [CI](.github/workflows/ci.yml) runs on pushes, pull requests and manual dispatch:
 
 - Base installation, dependency consistency, compilation, regression and stdio
   tests on Python 3.10, 3.11, 3.12, 3.13 and 3.14.
-- A separate Python 3.12 job installs the CELLxGENE extra from a native
-  TileDB-SOMA wheel, verifies imports and runs the full suite including local SOMA.
 - A Python 3.12 packaging job builds an sdist and a wheel from that sdist, checks
   metadata with Twine, then installs each artifact into its own clean venv and
-  exercises all 57 installed MCP commands outside the source checkout.
+  exercises all 56 installed MCP commands outside the source checkout.
 
 Run the packaging checks locally with:
 

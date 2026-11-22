@@ -41,28 +41,6 @@ jobs:
       - name: Run regression and all stdio checks
         run: python -m pytest -q
 
-  cellxgene:
-    name: CELLxGENE (Python 3.12)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: pyproject.toml
-      - name: Install optional SDK with a native wheel
-        run: python -m pip install --only-binary=tiledbsoma -e '.[dev,cellxgene]'
-      - name: Verify the optional dependency is importable
-        run: python -c 'import cellxgene_census, tiledbsoma; print(cellxgene_census.__version__, tiledbsoma.__version__)'
-      - name: Check dependency consistency
-        run: python -m pip check
-      - name: Run full suite including the real local SOMA test
-        run: python -m pytest -q
-
   distributions:
     name: Build and install distributions
     runs-on: ubuntu-latest

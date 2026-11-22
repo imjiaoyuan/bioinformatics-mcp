@@ -24,7 +24,6 @@ SERVERS = {
     "bioconductor": (3, "bioconductor_package", {}),
     "biostudies": (4, "biostudies_search", {}),
     "cbioportal": (6, "cbioportal_studies", {"limit": 0}),
-    "cellxgene": (6, "cellxgene_versions", {"limit": 0}),
     "chembl": (6, "chembl_search", {}),
     "cncb": (8, "cncb_genome", {}),
     "ena": (4, "ena_search", {}),

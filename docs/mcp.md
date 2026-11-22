@@ -81,10 +81,6 @@ python -m pip install -e .
 ```
 
 Every server is then available as `<REPOSITORY_ROOT>/.venv/bin/<command>-mcp`.
-The `cellxgene-mcp` cell-level tools need the optional SDK in a separate
-Python 3.10–3.13 environment (see the README); use
-`<REPOSITORY_ROOT>/.venv-cellxgene/bin/cellxgene-mcp` for that server.
-
 Environment variables servers read from their process environment:
 
 | Variable | Used by | Required | Purpose |

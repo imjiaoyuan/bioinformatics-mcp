@@ -11,7 +11,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=9.2,<10", "build>=1.6.1,<2", "twine>=7,<8"]
-cellxgene = ["cellxgene-census>=1.18.0,<2", "tiledbsoma>=2.3,<3"]
 
 [project.scripts]
 bioinformatics-mcp = "common.cli:main"
@@ -30,7 +29,6 @@ biostudies-mcp = "servers.biostudies_mcp.server:main"
 interpro-mcp = "servers.interpro_mcp.server:main"
 gdc-mcp = "servers.gdc_mcp.server:main"
 reactome-mcp = "servers.reactome_mcp.server:main"
-cellxgene-mcp = "servers.cellxgene_mcp.server:main"
 chembl-mcp = "servers.chembl_mcp.server:main"
 gwas-mcp = "servers.gwas_mcp.server:main"
 opentargets-mcp = "servers.opentargets_mcp.server:main"
