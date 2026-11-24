@@ -39,7 +39,8 @@ class ComplexPortalTests(HTTPTestCase):
             participants = await api.complexportal_participants("CPX-1041")
             self.assertEqual(participants["complex_ac"], "CPX-1041")
             self.assertEqual(participants["participants"][0]["identifier"], "P69852")
-        self.assertEqual(len(paths), 3)
+        # Participants reuse the cached details response (default TTL), so only two network calls.
+        self.assertEqual(len(paths), 2)
 
     async def test_validation_before_network(self):
         cases = [(api.complexportal_search, {"query": "", "limit": 1}),

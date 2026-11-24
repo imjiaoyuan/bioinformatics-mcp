@@ -25,22 +25,24 @@ _client: httpx.AsyncClient | None = None
 _client_loop: asyncio.AbstractEventLoop | None = None
 _PRIVATE_PARAMETERS = {"apikey", "ncbiapikey", "accesskey", "accesstoken", "token",
                        "authorization", "password", "secret", "clientsecret", "email"}
+_NON_ALNUM = re.compile(r"[^a-z0-9]")
+_URL_IN_LOG = re.compile(r"https?://[^\s\"'<>]+")
+_SECRET_IN_LOG = re.compile(r"(?i)((?:api[_-]?key|accesskey|access_token|token|email|password|client_secret)=)[^&\s\"'<>]+")
 
 
 def safe_url(url: str | httpx.URL) -> str:
     """Keep traceable query parameters while removing credentials and contact addresses."""
     parts = urlsplit(str(url))
     query = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)
-             if re.sub(r"[^a-z0-9]", "", key.lower()) not in _PRIVATE_PARAMETERS]
+             if _NON_ALNUM.sub("", key.lower()) not in _PRIVATE_PARAMETERS]
     authority = parts.netloc.rsplit("@", 1)[-1]
     return urlunsplit((parts.scheme, authority, parts.path, urlencode(query), ""))
 
 
 class _SafeHTTPLog(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
-        message = re.sub(r"https?://[^\s\"'<>]+", lambda match: safe_url(match.group()), record.getMessage())
-        message = re.sub(r"(?i)((?:api[_-]?key|accesskey|access_token|token|email|password|client_secret)=)[^&\s\"'<>]+",
-                         r"\1REDACTED", message)
+        message = _URL_IN_LOG.sub(lambda match: safe_url(match.group()), record.getMessage())
+        message = _SECRET_IN_LOG.sub(r"\1REDACTED", message)
         record.msg, record.args = message, ()
         return True
 
@@ -84,7 +86,7 @@ async def _shared_client(timeout: float) -> httpx.AsyncClient:
             await _client.aclose()
         _client = httpx.AsyncClient(
             timeout=timeout, follow_redirects=True, http2=_HTTP2,
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=20),
             headers={"User-Agent": "bioinformatics-mcp/0.1"})
         _client_loop = loop
     return _client
@@ -157,3 +159,14 @@ async def request(method: str, url: str, *, params: dict | None = None,
 
 async def get_json(url: str, params: dict | None = None) -> Any:
     return (await request("GET", url, params=params)).json()
+
+
+async def gather_bounded(coros, *, limit: int = 12) -> list[Any]:
+    """Gather coroutines with at most ``limit`` in flight; failures come back as exceptions."""
+    semaphore = asyncio.Semaphore(limit)
+
+    async def run(coro: Any) -> Any:
+        async with semaphore:
+            return await coro
+
+    return await asyncio.gather(*(run(coro) for coro in coros), return_exceptions=True)

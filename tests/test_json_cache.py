@@ -58,6 +58,50 @@ class JsonCacheTests(HTTPTestCase):
             await api.json_response("https://example.org/z", body={"q": "1"}, ttl=300)
         self.assertEqual(len(calls), 2)
 
+    async def test_gets_are_cached_by_default_and_ttl_zero_opts_out(self):
+        calls = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls.append(1)
+            return httpx.Response(200, json={"n": len(calls)})
+
+        with self.mock_http(handler):
+            await api.json_response("https://example.org/a", {"id": "1"})
+            _, cached_meta = await api.json_response("https://example.org/a", {"id": "1"})
+            await api.json_response("https://example.org/a", {"id": "1"}, ttl=0)
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(cached_meta.get("cached"))
+
+    async def test_concurrent_identical_gets_share_one_request(self):
+        import asyncio
+
+        calls = []
+
+        async def delayed(request: httpx.Request) -> httpx.Response:
+            await asyncio.sleep(0.05)
+            calls.append(1)
+            return httpx.Response(200, json={"n": len(calls)})
+
+        with self.mock_http(delayed):
+            first, second = await asyncio.gather(
+                api.json_response("https://example.org/s", {"id": "1"}),
+                api.json_response("https://example.org/s", {"id": "1"}))
+        self.assertEqual(first[0], second[0])
+        self.assertEqual(len(calls), 1)
+
+    async def test_cache_key_distinguishes_headers(self):
+        calls = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls.append(request.headers.get("x-scope"))
+            return httpx.Response(200, json={"n": len(calls)})
+
+        with self.mock_http(handler):
+            await api.json_response("https://example.org/h", {"id": "1"}, headers={"x-scope": "a"}, ttl=300)
+            _, meta = await api.json_response("https://example.org/h", {"id": "1"}, headers={"x-scope": "b"}, ttl=300)
+        self.assertEqual(calls, ["a", "b"])
+        self.assertNotIn("cached", meta)
+
 
 if __name__ == "__main__":
     unittest.main()

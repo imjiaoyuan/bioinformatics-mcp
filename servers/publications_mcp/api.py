@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 import httpx
 from pydantic import Field
 
-from common.http import bounded, identifier, request, text
+from common.http import bounded, gather_bounded, identifier, request, text
 
 CROSSREF = "https://api.crossref.org"
 OPENALEX = "https://api.openalex.org"
@@ -98,7 +98,7 @@ async def publication_related(doi: str, limit: Annotated[int, Field(ge=1, le=50)
         return {"title": x.get("title"), "doi": x.get("doi"), "year": x.get("publication_year"),
                 "url": x.get("id") or f"https://openalex.org/{wid}"}
 
-    records = await asyncio.gather(*(fetch_work(wid) for wid in ids), return_exceptions=True)
+    records = await gather_bounded(fetch_work(wid) for wid in ids)
     articles, errors = [], []
     for wid, result in zip(ids, records):
         if isinstance(result, Exception):

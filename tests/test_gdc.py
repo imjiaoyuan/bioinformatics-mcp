@@ -41,6 +41,8 @@ class GDCTests(HTTPTestCase):
         with self.mock_http(lambda req: httpx.Response(200, json={"data": {"access": "open", "file_id": UUID}})):
             self.assertEqual((await api.gdc_file(UUID))["data"]["file_id"], UUID)
             self.assertEqual((await api.gdc_download_url(UUID))["download_url"], f"{api.BASE}/data/{UUID}")
+        from common import api as common_api
+        common_api._cache.clear()  # Drop the cached open-access response before probing controlled access.
         with self.mock_http(lambda req: httpx.Response(200, json={"data": {"access": "controlled"}})):
             with self.assertRaisesRegex(ValueError, "controlled"):
                 await api.gdc_download_url(UUID)

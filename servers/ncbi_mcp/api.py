@@ -21,7 +21,7 @@ from urllib.parse import quote
 
 from pydantic import Field
 
-from common.http import bounded, identifier, identifiers, request, text
+from common.http import bounded, gather_bounded, identifier, identifiers, request, text
 from common.api import choice
 from common.ena import RUN_FIELDS as ENA_RUN_FIELDS, files_from_record
 from common.geo import soft_samples
@@ -521,7 +521,7 @@ async def _ena_section(f: Filters, limit: int, metadata_limit: int) -> dict[str,
         return rows
 
     # Run windows concurrently; the per-host rate limiter still spaces their starts.
-    outcomes = await asyncio.gather(*(fetch_window(params) for _, params in prepared), return_exceptions=True)
+    outcomes = await gather_bounded((fetch_window(params) for _, params in prepared))
     for (query, params), outcome in zip(prepared, outcomes):
         source_url = ENA_PORTAL + "?" + urlencode(params)
         queries.append(query)
@@ -541,7 +541,7 @@ async def _ena_section(f: Filters, limit: int, metadata_limit: int) -> dict[str,
     samples = list(dict.fromkeys(row.get("sample_accession") for row in records.values() if row.get("sample_accession")))
     need_metadata = bool(f.tissue or f.pairing == "same_donor" or f.sample_type != "any" or f.sample_scope != "any")
     selected = samples[:metadata_limit] if need_metadata else []
-    results = await asyncio.gather(*[_sample_attributes(sample) for sample in selected], return_exceptions=True)
+    results = await gather_bounded([_sample_attributes(sample) for sample in selected])
     attributes = dict(zip(selected, results))
     candidates, runs, warnings = [], [], []
     for accession, row in records.items():
@@ -770,7 +770,7 @@ async def find_data(
     tasks = {name: (_entrez_section(name, f, entry_type, limit) if name in {"geo", "sra"}
                     else _ena_section(f, limit, metadata_limit) if name == "ena"
                     else _discovery_gsa(f, limit)) for name in chosen}
-    results = await asyncio.gather(*tasks.values(), return_exceptions=True)
+    results = await gather_bounded(tasks.values())
     output: dict[str, Any] = {"data_type": f.data_type or None, "organism": f.organism or None,
                               "condition": f.condition or None, "archives": chosen,
                               "filters": f.as_dict(), "errors": {}, "warnings": [], "partial": False}
@@ -937,7 +937,7 @@ async def download_plan(accessions: list[str], limit: Annotated[int, Field(ge=1,
     jobs = [(accession, _geo_file_urls(accession)) for accession in geo_accessions]
     if sra_accessions:
         jobs.append(("sra", _sra_runs_for_accessions(sra_accessions, limit)))
-    results = await asyncio.gather(*(task for _, task in jobs), return_exceptions=True)
+    results = await gather_bounded(task for _, task in jobs)
     errors = {}
     truncated = False
     for (accession, _), result in zip(jobs, results):

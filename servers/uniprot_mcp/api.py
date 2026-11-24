@@ -7,7 +7,7 @@ from typing import Annotated
 
 from pydantic import Field
 
-from common.http import bounded, get_json, identifier, identifiers, request, text
+from common.http import bounded, gather_bounded, get_json, identifier, identifiers, request, text
 
 BASE = "https://rest.uniprot.org"
 FIELDS = "accession,id,protein_name,gene_names,organism_name,length,cc_function,cc_subcellular_location"
@@ -123,8 +123,7 @@ async def uniprot_function(gene: str,
     rows = search["results"][:limit]
     total_value = search.get("total")
     total = int(total_value) if total_value is not None and str(total_value).isdigit() else None
-    results = await asyncio.gather(*(uniprot_entry(row["primaryAccession"]) for row in rows),
-                                   return_exceptions=True)
+    results = await gather_bounded(uniprot_entry(row["primaryAccession"]) for row in rows)
     entries, errors = [], []
     for row, result in zip(rows, results):
         if isinstance(result, Exception):

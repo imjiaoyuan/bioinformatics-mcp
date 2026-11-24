@@ -50,7 +50,8 @@ class RNAcentralTests(HTTPTestCase):
             self.assertEqual(len(publications["results"]), 1)
             self.assertTrue(publications["truncated"])
             self.assertEqual(publications["pagination"], "local")
-        self.assertEqual(len(paths), 4)
+        # Sequence reuses the cached entry response (default TTL), so only three network calls.
+        self.assertEqual(len(paths), 3)
 
     async def test_unexpected_entry_payload_is_rejected(self):
         with self.mock_http(lambda req: httpx.Response(200, json=["not-an-entry"])):
