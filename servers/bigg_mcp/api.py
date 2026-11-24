@@ -36,6 +36,7 @@ async def bigg_models(limit: Limit = 50, offset: Offset = 0) -> dict:
 
     Results are paged locally; the upstream list endpoint has no pagination.
     """
+    page(limit, offset)
     return _slice(await _get("/models"), limit, offset)
 
 
@@ -49,6 +50,7 @@ async def bigg_model_reactions(model_bigg_id: str, limit: Limit = 50, offset: Of
 
     Results are paged locally; the upstream list endpoint has no pagination.
     """
+    page(limit, offset)
     _id(model_bigg_id, "model_bigg_id")
     return _slice(await _get(f"/models/{model_bigg_id}/reactions"), limit, offset)
 
@@ -58,6 +60,7 @@ async def bigg_model_metabolites(model_bigg_id: str, limit: Limit = 50, offset: 
 
     Results are paged locally; the upstream list endpoint has no pagination.
     """
+    page(limit, offset)
     _id(model_bigg_id, "model_bigg_id")
     return _slice(await _get(f"/models/{model_bigg_id}/metabolites"), limit, offset)
 

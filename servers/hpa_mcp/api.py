@@ -11,7 +11,7 @@ from typing import Annotated
 
 from pydantic import Field
 
-from common.api import json_response, local_page
+from common.api import json_response, local_page, page
 from common.http import identifier, text
 
 BASE = "https://www.proteinatlas.org/search"
@@ -87,6 +87,7 @@ async def hpa_search(query: str, limit: Limit = 20, offset: Offset = 0) -> dict:
     Slices the byte-bounded upstream result locally; consult the licence
     (https://www.proteinatlas.org/about/licence) before redistributing content.
     """
+    page(limit, offset)
     rows, source = await _rows(text(query, "query", 500))
     return {**local_page(rows, limit, offset), "source_url": source}
 

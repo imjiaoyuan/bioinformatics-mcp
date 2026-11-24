@@ -28,6 +28,7 @@ def _accession(value: str) -> str:
 async def metabolights_studies(limit: Annotated[int, Field(ge=1, le=100)] = 20,
                                offset: Annotated[int, Field(ge=0, le=100_000)] = 0) -> dict:
     """List all public MetaboLights study accessions (sliced locally from the catalogue)."""
+    page(limit, offset)
     data, source = await json_response(f"{BASE}/studies")
     rows = data.get("content", [])
     return {**source, **local_page(rows, limit, offset)}

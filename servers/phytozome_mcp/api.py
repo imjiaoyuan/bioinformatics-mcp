@@ -27,7 +27,7 @@ from typing import Annotated, Any
 
 from pydantic import Field
 
-from common.api import local_page
+from common.api import local_page, page
 from common.http import bounded, identifier, request, safe_url, text
 
 BASE = "https://phytozome-next.jgi.doe.gov/pz/v3"
@@ -112,6 +112,7 @@ async def phytozome_organisms(query: str = "",
     needle = ""
     if query:
         needle = text(query, "query", 150).lower()
+    page(limit, offset)
     data, source_url = await _get("organism", {"compressed": "false"})
     rows = _rows(data)
     if rows is None:
@@ -119,8 +120,7 @@ async def phytozome_organisms(query: str = "",
     if needle:
         rows = [row for row in rows if _match(row, needle)]
     return local_page([{key: value for key, value in row.items()} for row in rows],
-                      bounded(limit), bounded(offset, 1_000_000, "offset", 0),
-                      source_url=source_url, query=query or None)
+                      limit, offset, source_url=source_url, query=query or None)
 
 
 async def phytozome_organism(organism_id: str) -> dict:
@@ -179,6 +179,7 @@ async def phytozome_gene_search(keyword: str, organism: str | None = None,
     locally over the bounded upstream response.
     """
     needle = text(keyword, "keyword", 150)
+    paging = page(limit, offset)
     params: dict[str, Any] = {"keyword": needle}
     if organism is not None:
         params["organism"] = identifier(organism, ORGANISM_PATTERN, "organism")
@@ -186,10 +187,10 @@ async def phytozome_gene_search(keyword: str, organism: str | None = None,
     rows = _rows(data)
     if rows is None:
         return _passthrough(data, source_url, keyword=needle)
-    paging = {"limit": bounded(limit), "offset": bounded(offset, 1_000_000, "offset", 0)}
+    start = paging["offset"]
     return {"source_url": source_url, "keyword": needle, **paging,
-            "results": rows[paging["offset"]:paging["offset"] + paging["limit"]],
-            "total": len(rows), "truncated": paging["offset"] + paging["limit"] < len(rows),
+            "results": rows[start:start + paging["limit"]],
+            "total": len(rows), "truncated": start + paging["limit"] < len(rows),
             "pagination": "local"}
 
 

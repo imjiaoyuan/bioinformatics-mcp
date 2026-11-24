@@ -7,7 +7,7 @@ from typing import Annotated
 import httpx
 from pydantic import Field
 
-from common.api import json_response, local_page
+from common.api import json_response, local_page, page
 from common.http import identifier, request, safe_url, text
 
 PUG = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
@@ -69,6 +69,7 @@ async def pubchem_compound(cid: str) -> dict:
 async def pubchem_synonyms(cid: str, limit: Annotated[int, Field(ge=1, le=100)] = 20,
                            offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """List known names, trade names and CAS-style synonyms for one CID; paginated locally."""
+    page(limit, offset)
     data = await _get(f"{PUG}/compound/cid/{_cid(cid)}/synonyms/JSON")
     info = data.get("InformationList", {}).get("Information", [])
     synonyms = info[0].get("Synonym", []) if info else []

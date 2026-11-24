@@ -42,11 +42,11 @@ async def panelapp_panels(name: str | None = None,
 
     ``name`` filters case-insensitively over the fetched page (upstream has no name filter).
     """
+    needle = text(name, "name", 200).lower() if name is not None else None
     data, source = await _get("panels/", {"page": bounded(page_index, 500, "page_index", 1),
                                           "page_size": bounded(page_size, _PAGE_SIZE)})
     rows = data.get("results", [])
-    if name is not None:
-        needle = text(name, "name", 200).lower()
+    if needle is not None:
         rows = [row for row in rows if needle in row.get("name", "").lower()]
     results = [{"id": row.get("id"), "name": row.get("name"), "version": row.get("version"),
                 "status": row.get("status"), "disease_group": row.get("disease_group"),

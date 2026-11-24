@@ -9,7 +9,7 @@ import json
 import re
 from typing import Literal
 
-from common.api import choice, local_page
+from common.api import choice, local_page, page
 from common.http import identifier, request, text
 
 BASE = "https://rest.kegg.jp"
@@ -74,6 +74,7 @@ async def kegg_list(database: DatabaseName, organism: str | None = None, limit: 
 
     Locally slices the byte-bounded upstream list; results carry local pagination.
     """
+    page(limit, offset)
     database = _db(database)
     organism = _organism(organism) if organism is not None else None
     body, source = await _get_text(f"list/{database}" + (f"/{organism}" if organism else ""))
@@ -86,6 +87,7 @@ async def kegg_find(database: DatabaseName, query: str, option: FindOption | Non
 
     Options formula, exact_mass, mol_weight and nop apply only to compound and drug.
     """
+    page(limit, offset)
     database = _db(database)
     query = text(query, "query", 200)
     if option is not None:

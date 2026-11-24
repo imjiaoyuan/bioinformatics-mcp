@@ -61,6 +61,7 @@ async def wikipathways_search(query: str, species: str | None = None,
     """
     query = text(query, "query", 200)
     species_filter = _species(species)
+    page(limit, offset)
     rows, source = await _pathway_rows()
     needle = query.lower()
     filtered = [row for row in rows
@@ -76,6 +77,7 @@ async def wikipathways_species_pathways(species: str,
                                         offset: Annotated[int, Field(ge=0, le=1_000_000)] = 0) -> dict:
     """List all catalogue pathways of one species (e.g. ``Homo sapiens`` or ``Homo_sapiens``)."""
     species_filter = _species(species)
+    page(limit, offset)
     needle = species_filter.replace("_", " ").lower()
     organisms, source = await _organisms()
     rows = [pathway for organism in organisms

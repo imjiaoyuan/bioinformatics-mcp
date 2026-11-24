@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from typing import Literal
 
-from common.api import local_page
+from common.api import local_page, page
 from common.http import identifier, identifiers, request, text
 
 BASE = "https://www.gsea-msigdb.org/gsea/msigdb"
@@ -86,10 +86,11 @@ async def msigdb_gene_set(species: Literal["human", "mouse"], gene_set: str) -> 
 async def msigdb_gene_set_genes(species: Literal["human", "mouse"], gene_set: str, limit: int = 100,
                                 offset: int = 0) -> dict:
     """List the curated gene members of one gene set with local pagination."""
+    page(limit, offset)
     result = await _fetch_gene_set(species, gene_set)
     genes = result.pop("genes")
-    page = local_page(genes, limit, offset)
-    return {**result, **page}
+    paging = local_page(genes, limit, offset)
+    return {**result, **paging}
 
 
 async def msigdb_gene_sets(species: Literal["human", "mouse"], gene_sets: list[str]) -> dict:

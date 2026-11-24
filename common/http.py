@@ -52,8 +52,10 @@ for _logger_name in ("httpx", "httpcore", "httpcore.http11", "httpcore.http2", "
 
 
 def text(value: str, name: str = "query", maximum: int = 2000) -> str:
+    if any(ord(c) < 32 for c in value):
+        raise ValueError(f"{name} must contain 1-{maximum} characters without control characters")
     value = value.strip()
-    if not value or len(value) > maximum or any(ord(c) < 32 for c in value):
+    if not value or len(value) > maximum:
         raise ValueError(f"{name} must contain 1-{maximum} characters without control characters")
     return value
 

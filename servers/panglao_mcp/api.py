@@ -16,7 +16,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
-from common.api import choice, local_page
+from common.api import choice, local_page, page
 from common.http import identifier, request, text
 
 BASE = "https://panglaodb.se"
@@ -134,6 +134,7 @@ async def panglao_search_markers(query: str, species: Species = "both",
     Matching is case-insensitive and bounded locally; data come from the static
     marker snapshot (2020-03-27).
     """
+    page(limit, offset)
     needle = text(query, "query", 150).lower()
     codes = _species_filter(species)
     matched = []

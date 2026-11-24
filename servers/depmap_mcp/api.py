@@ -5,7 +5,7 @@ from typing import Annotated
 
 from pydantic import Field
 
-from common.api import local_page
+from common.api import local_page, page
 from common.http import identifier, text, get_json
 
 API_BASE = "https://depmap.org/portal/api"
@@ -25,6 +25,7 @@ def _label(value: str, name: str) -> str:
 
 async def depmap_datasets(limit: Limit = 20, offset: Offset = 0) -> dict:
     """List matrix datasets available for custom download with local paging."""
+    page(limit, offset)
     rows = await get_json(f"{API_BASE}/download/datasets")
     return local_page(rows, limit, offset, source_url=f"{API_BASE}/download/datasets")
 
